@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="description" content="Free online PDF compression tool to reduce file size while maintaining quality. Compress PDFs quickly and easily.">
     <meta name="keywords" content="PDF compression, compress PDF, reduce PDF size, PDF optimizer, online PDF tool">
-    <title>SmartPDF Compressor - Optimize Your PDF Files Online</title>
+    <title>PDFCompress Pro - Optimize Your PDF Files Online</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
         * {
@@ -311,6 +311,32 @@
             opacity: 0.8;
         }
         
+        /* Progress bar styles */
+        .progress-container {
+            width: 100%;
+            height: 8px;
+            background: #e0e0e0;
+            border-radius: 4px;
+            margin: 20px 0;
+            overflow: hidden;
+            display: none;
+        }
+        
+        .progress-bar {
+            height: 100%;
+            background: linear-gradient(to right, #6a11cb, #2575fc);
+            border-radius: 4px;
+            width: 0%;
+            transition: width 0.3s ease;
+        }
+        
+        .status-text {
+            text-align: center;
+            color: #666;
+            margin-bottom: 15px;
+            display: none;
+        }
+        
         @media (max-width: 768px) {
             header h1 {
                 font-size: 2.2rem;
@@ -337,7 +363,7 @@
 <body>
     <div class="container">
         <header>
-            <h1>SmartPDF Compressor</h1>
+            <h1>PDFCompress Pro</h1>
             <p>Reduce your PDF file size without losing quality. Fast, secure, and completely free to use!</p>
         </header>
         
@@ -381,6 +407,14 @@
                     </div>
                 </div>
                 
+                <div class="status-text" id="statusText">
+                    Preparing for compression...
+                </div>
+                
+                <div class="progress-container" id="progressContainer">
+                    <div class="progress-bar" id="progressBar"></div>
+                </div>
+                
                 <div class="action-buttons">
                     <button class="btn btn-compress" id="compressBtn">Compress PDF</button>
                     <button class="btn btn-download" id="downloadBtn">Download Compressed PDF</button>
@@ -393,7 +427,7 @@
                     <div class="ad-placeholder">
                         <i class="fas fa-ad"></i>
                         <p>Ad Space (300x250)</p>
-                        <p>AdSense Unit ID: <span contenteditable="true">ca-app-pub-7007504362603856/9032794510</span></p>
+                        <p>AdSense Unit ID: <span contenteditable="true">ca-pub-example</span></p>
                     </div>
                 </div>
                 
@@ -402,7 +436,7 @@
                     <div class="ad-placeholder">
                         <i class="fas fa-ad"></i>
                         <p>Ad Space (300x600)</p>
-                        <p>AdSense Unit ID: <span contenteditable="true">ca-app-pub-7007504362603856/9032794510</span></p>
+                        <p>AdSense Unit ID: <span contenteditable="true">ca-pub-example</span></p>
                     </div>
                 </div>
             </div>
@@ -428,7 +462,7 @@
     </div>
     
     <footer>
-        <p>&copy; 2023 SmartPDF Compressor. All rights reserved.</p>
+        <p>&copy; 2023 PDFCompress Pro. All rights reserved.</p>
     </footer>
 
     <script>
@@ -442,6 +476,9 @@
             const originalSizeElem = document.getElementById('originalSize');
             const compressedSizeElem = document.getElementById('compressedSize');
             const reductionElem = document.getElementById('reduction');
+            const progressContainer = document.getElementById('progressContainer');
+            const progressBar = document.getElementById('progressBar');
+            const statusText = document.getElementById('statusText');
             
             let selectedFile = null;
             
@@ -483,21 +520,13 @@
                     return;
                 }
                 
-                // Simulate compression process
-                this.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Compressing...';
-                this.disabled = true;
+                // Show progress UI
+                progressContainer.style.display = 'block';
+                statusText.style.display = 'block';
+                compressBtn.disabled = true;
                 
-                setTimeout(() => {
-                    // Show success and enable download
-                    this.innerHTML = 'Compress PDF';
-                    this.disabled = false;
-                    downloadBtn.style.display = 'inline-block';
-                    
-                    // Update stats based on compression level
-                    updateCompressionStats();
-                    
-                    alert('Compression completed successfully!');
-                }, 2000);
+                // Simulate backend communication
+                simulateBackendCompression();
             });
             
             // Download button click
@@ -562,7 +591,87 @@
                 compressedSizeElem.textContent = `${(compressedSize / (1024 * 1024)).toFixed(2)} MB`;
                 reductionElem.textContent = `${reduction.toFixed(0)}%`;
             }
+            
+            // Simulate backend communication and compression
+            function simulateBackendCompression() {
+                const compressionLevel = compressionSlider.value;
+                let progress = 0;
+                
+                statusText.textContent = "Uploading to server...";
+                
+                // Simulate upload progress
+                const uploadInterval = setInterval(() => {
+                    progress += 5;
+                    progressBar.style.width = `${progress}%`;
+                    
+                    if (progress >= 30) {
+                        clearInterval(uploadInterval);
+                        simulateCompressionProcess();
+                    }
+                }, 100);
+            }
+            
+            function simulateCompressionProcess() {
+                statusText.textContent = "Compressing PDF...";
+                let progress = 30;
+                
+                // Simulate compression progress
+                const compressionInterval = setInterval(() => {
+                    progress += 2;
+                    progressBar.style.width = `${progress}%`;
+                    
+                    if (progress >= 80) {
+                        clearInterval(compressionInterval);
+                        simulateDownloadPreparation();
+                    }
+                }, 100);
+            }
+            
+            function simulateDownloadPreparation() {
+                statusText.textContent = "Finalizing compression...";
+                let progress = 80;
+                
+                // Simulate finalization progress
+                const finalizeInterval = setInterval(() => {
+                    progress += 5;
+                    progressBar.style.width = `${progress}%`;
+                    
+                    if (progress >= 100) {
+                        clearInterval(finalizeInterval);
+                        compressionComplete();
+                    }
+                }, 100);
+            }
+            
+            function compressionComplete() {
+                statusText.textContent = "Compression complete!";
+                progressBar.style.background = "#4caf50";
+                
+                // Enable download button
+                setTimeout(() => {
+                    downloadBtn.style.display = 'inline-block';
+                    compressBtn.disabled = false;
+                    
+                    // Show success message
+                    alert('Compression completed successfully!');
+                }, 500);
+            }
         });
     </script>
+  <script>
+// Example using Fetch API
+async function compressPDF(file, compressionLevel) {
+  const formData = new FormData();
+  formData.append('pdf', file);
+  formData.append('compressionLevel', compressionLevel);
+  
+  const response = await fetch('/api/compress', {
+    method: 'POST',
+    body: formData
+  });
+  
+  return await response.json();
+}
+     </script> 
 </body>
 </html>
