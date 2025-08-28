@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Chat + Calls (Firebase + Google Sign-In)</title>
+  <style>
+    body {margin:0;font-family:sans-serif;background:#0b141a;color:#e9edef;}
+    header {background:#202c33;padding:10px;display:flex;justify-content:space-between;align-items:center;}
+    header button {background:#00a884;border:none;padding:6px 12px;border-radius:6px;color:#fff;cursor:pointer;}
+    #messages {height:200px;overflow:auto;background:#111b21;padding:10px;}
+    .bubble {padding:6px 10px;border-radius:8px;margin:5px 0;max-width:70%;}
+    .me {background:#005c4b;margin-left:auto;}
+    .them {background:#1f2c34;}
+    .composer {display:flex;padding:5px;background:#111b21;}
+    .composer input {flex:1;padding:8px;border-radius:6px;border:1px solid #333;background:#0f191f;color:#fff;}
+    .composer button {margin-left:5px;}
+    video {width:45%;background:#000;margin:5px;border-radius:8px;}
+  </style>
+</head>
+<body>
+  <header>
+    <div><b>Chat + Calls</b></div>
+    <div id="auth">
+      <button id="signIn">Sign in with Google</button>
+      <span id="userInfo" style="display:none;">
+        <span id="userName"></span>
+        <button id="signOut">Sign out</button>
+      </span>
+    </div>
+  </header>
+
+  <!-- Chat -->
+  <div>
+    <input id="roomId" placeholder="Room ID (shared for chat & calls)"/>
+    <button id="copyRoom">Copy</button>
+  </div>
+  <div id="messages"></div>
+  <div class="composer">
+    <input id="msgInput" placeholder="Type message" disabled/>
+    <button id="sendBtn" disabled>Send</button>
+  </div>
+
+  <!-- Call controls -->
+  <div>
+    <button id="createCall" disabled>Create Call</button>
+    <button id="answerCall" disabled>Answer Call</button>
+    <input id="answerRoomId" placeholder="Enter Room ID"/>
+    <button id="hangup" disabled>Hang Up</button>
+  </div>
+  <div>
+    <video id="localVideo" autoplay playsinline muted></video>
+    <video id="remoteVideo" autoplay playsinline></video>
+  </div>
+
+  <!-- Firebase SDKs -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+
+  <script>
+    // ====== Your Firebase config here ======
+   // Your web app's Firebase configuration
+const firebaseConfig = {
+  apiKey: "AIzaSyAbDUvGSBhVj-YIDVF4Bod2eYNx2uaox_Q",
+  authDomain: "helpsomeones-4a08a.firebaseapp.com",
+  databaseURL: "https://helpsomeones-4a08a-default-rtdb.firebaseio.com",
+  projectId: "helpsomeones-4a08a",
+  storageBucket: "helpsomeones-4a08a.firebasestorage.app",
+  messagingSenderId: "871091320832",
+  appId: "1:871091320832:web:918e4e2f9697788010c0e5"
+};
+    firebase.initializeApp(firebaseConfig);
+    const auth = firebase.auth();
+    const db = firebase.firestore();
+
+    // Elements
+    const signInBtn = document.getElementById("signIn");
+    const signOutBtn = document.getElementById("signOut");
+    const userInfo = document.getElementById("userInfo");
+    const userName = document.getElementById("userName");
+    const msgInput = document.getElementById("msgInput");
+    const sendBtn = document.getElementById("sendBtn");
+    const messagesEl = document.getElementById("messages");
+    const roomInput = document.getElementById("roomId");
+
+    let me=null, currentRoomId=null, unsub=null;
+
+    // Auth
+    const provider = new firebase.auth.GoogleAuthProvider();
+    signInBtn.onclick = ()=>auth.signInWithPopup(provider);
+    signOutBtn.onclick = ()=>auth.signOut();
+    auth.onAuthStateChanged(user=>{
+      me=user;
+      if(user){
+        signInBtn.style.display="none";
+        userInfo.style.display="inline";
+        userName.textContent=user.displayName||user.email;
+        enableUI(true);
+      } else {
+        signInBtn.style.display="inline";
+        userInfo.style.display="none";
+        userName.textContent="";
+        enableUI(false);
+      }
+    });
+    function enableUI(on){
+      msgInput.disabled=sendBtn.disabled=!on;
+      document.getElementById("createCall").disabled=
+      document.getElementById("answerCall").disabled=
+      document.getElementById("hangup").disabled=!on;
+    }
+
+    // Chat
+    function subscribeToChat(id){
+      if(unsub) unsub();
+      messagesEl.innerHTML="";
+      unsub=db.collection("rooms").doc(id).collection("messages")
+        .orderBy("createdAt").onSnapshot(s=>{
+          messagesEl.innerHTML="";
+          s.forEach(doc=>{
+            const m=doc.data();
+            const div=document.createElement("div");
+            div.className="bubble "+(m.senderId===me.uid?"me":"them");
+            div.textContent=m.senderName+": "+m.text;
+            messagesEl.appendChild(div);
+          });
+        });
+    }
+    async function ensureRoom(){
+      let id=roomInput.value.trim();
+      if(!id){
+        const ref=await db.collection("rooms").add({createdAt:firebase.firestore.FieldValue.serverTimestamp()});
+        id=ref.id; roomInput.value=id;
+      }
+      if(currentRoomId!==id){currentRoomId=id;subscribeToChat(id);}
+      return id;
+    }
+    sendBtn.onclick=async ()=>{
+      const text=msgInput.value.trim(); if(!text) return;
+      const room=await ensureRoom();
+      db.collection("rooms").doc(room).collection("messages").add({
+        text, senderId:me.uid, senderName:me.displayName||me.email,
+        createdAt:firebase.firestore.FieldValue.serverTimestamp()
+      });
+      msgInput.value="";
+    };
+
+    document.getElementById("copyRoom").onclick=async()=>{
+      const id=await ensureRoom(); navigator.clipboard.writeText(id); alert("Copied Room ID: "+id);
+    };
+
+    // WebRTC
+    const servers={iceServers:[{urls:["stun:stun.l.google.com:19302"]}]};
+    let pc, localStream, remoteStream, roomRef;
+
+    async function openMedia(){
+      if(localStream) return;
+      localStream=await navigator.mediaDevices.getUserMedia({video:true,audio:true});
+      document.getElementById("localVideo").srcObject=localStream;
+      remoteStream=new MediaStream();
+      document.getElementById("remoteVideo").srcObject=remoteStream;
+    }
+    function createPeer(){
+      pc=new RTCPeerConnection(servers);
+      localStream.getTracks().forEach(t=>pc.addTrack(t,localStream));
+      pc.ontrack=e=>e.streams[0].getTracks().forEach(t=>remoteStream.addTrack(t));
+      pc.onicecandidate=e=>{if(e.candidate) roomRef.collection(pc.localDescription.type==='offer'?'callerCandidates':'calleeCandidates').add(e.candidate.toJSON());};
+    }
+    async function createCall(){
+      await openMedia(); const id=await ensureRoom(); roomRef=db.collection("rooms").doc(id);
+      createPeer();
+      const offer=await pc.createOffer(); await pc.setLocalDescription(offer);
+      await roomRef.set({offer});
+      roomRef.onSnapshot(async snap=>{const d=snap.data(); if(d.answer && !pc.currentRemoteDescription){await pc.setRemoteDescription(new RTCSessionDescription(d.answer));}});
+      roomRef.collection("calleeCandidates").onSnapshot(s=>s.docChanges().forEach(c=>pc.addIceCandidate(new RTCIceCandidate(c.doc.data()))));
+      alert("Call created. Share Room ID: "+id);
+    }
+    async function answerCall(){
+      await openMedia(); const id=document.getElementById("answerRoomId").value.trim()||roomInput.value; roomRef=db.collection("rooms").doc(id);
+      const snap=await roomRef.get(); if(!snap.exists) return alert("Room not found");
+      createPeer();
+      await pc.setRemoteDescription(new RTCSessionDescription(snap.data().offer));
+      const answer=await pc.createAnswer(); await pc.setLocalDescription(answer);
+      await roomRef.update({answer});
+      roomRef.collection("callerCandidates").onSnapshot(s=>s.docChanges().forEach(c=>pc.addIceCandidate(new RTCIceCandidate(c.doc.data()))));
+      roomInput.value=id; ensureRoom();
+    }
+    async function hangup(){
+      if(pc) pc.close(); pc=null; localStream=null; remoteStream=null;
+      document.getElementById("localVideo").srcObject=null;
+      document.getElementById("remoteVideo").srcObject=null;
+    }
+
+    document.getElementById("createCall").onclick=createCall;
+    document.getElementById("answerCall").onclick=answerCall;
+    document.getElementById("hangup").onclick=hangup;
+  </script>
+</body>
+</html>
