@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Chat + AV Calls</title>
+  <style>
+    :root{--bg:#0b141a;--panel:#111b21;--panel-2:#202c33;--accent:#00a884;--text:#e9edef;--muted:#8696a0;--bubble:#005c4b;--bubble-me:#1f2c34}
+    *{box-sizing:border-box}
+    body{margin:0;background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,'Helvetica Neue',Arial}
+    .app{display:grid;grid-template-columns: 1.6fr 1.2fr;min-height:100dvh}
+    header{grid-column:1/-1;background:var(--panel-2);display:flex;align-items:center;gap:.75rem;padding:.75rem 1rem;border-bottom:1px solid #24323a}
+    header .title{font-weight:700}
+    header .me{margin-left:auto;font-size:.9rem;color:var(--muted)}
+
+    .chat{display:flex;flex-direction:column;border-right:1px solid #24323a}
+    .chat__toolbar{background:var(--panel);padding:.5rem 1rem;display:flex;align-items:center;gap:.5rem}
+    .chat__toolbar input[type=text]{flex:1;background:#0f191f;border:1px solid #223038;border-radius:8px;padding:.6rem .8rem;color:var(--text)}
+    .chat__toolbar button{background:var(--accent);border:none;color:#043d36;padding:.6rem 1rem;border-radius:10px;font-weight:700;cursor:pointer}
+
+    .messages{flex:1;background:url('https://i.imgur.com/4M7Iq8S.png') center/cover no-repeat fixed; /* subtle pattern */
+      padding:1rem;overflow:auto}
+    .bubble{max-width:70%;padding:.6rem .8rem;border-radius:10px;margin:.25rem 0;line-height:1.35}
+    .bubble.me{margin-left:auto;background:var(--bubble);}
+    .bubble.them{background:var(--bubble-me)}
+    .bubble .meta{display:block;margin-top:.25rem;color:var(--muted);font-size:.7rem;text-align:right}
+
+    .composer{padding:.6rem;background:var(--panel);display:flex;gap:.5rem;border-top:1px solid #24323a}
+    .composer input{flex:1;background:#0f191f;border:1px solid #223038;border-radius:20px;padding:.7rem 1rem;color:var(--text)}
+    .composer button{background:var(--accent);border:none;color:#043d36;padding:.7rem 1rem;border-radius:20px;font-weight:800;cursor:pointer}
+
+    .av{display:flex;flex-direction:column}
+    .av .controls{background:var(--panel);padding:.75rem;display:grid;grid-template-columns:repeat(2,1fr);gap:.5rem;border-bottom:1px solid #24323a}
+    .av .controls input, .av .controls button{width:100%}
+    .av .controls input{background:#0f191f;border:1px solid #223038;border-radius:8px;padding:.6rem .8rem;color:var(--text)}
+    .av .controls button{background:var(--accent);border:none;color:#043d36;padding:.6rem .8rem;border-radius:10px;font-weight:700;cursor:pointer}
+
+    .videos{display:grid;grid-template-columns:1fr 1fr;gap:.75rem;padding:1rem}
+    video{width:100%;background:#000;border-radius:12px}
+    .toggles{display:flex;gap:.5rem;padding:0 1rem 1rem}
+    .toggles button{flex:1;background:#17343a;border:1px solid #2a4a51;color:#b6c7cc;border-radius:10px;padding:.6rem;cursor:pointer}
+
+    .notice{color:var(--muted);font-size:.85rem;padding:.5rem 1rem}
+
+    @media (max-width: 980px){.app{grid-template-columns:1fr}.chat{border-right:none;border-bottom:1px solid #24323a}}
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header>
+      <div class="title">WhatsApp‑like Chat + Calls</div>
+      <div class="me" id="me"></div>
+    </header>
+
+    <!-- CHAT PANEL -->
+    <section class="chat">
+      <div class="chat__toolbar">
+        <input id="roomId" type="text" placeholder="Room ID (for chat & calls) — leave blank to auto-create on call" />
+        <button id="copyRoom">Copy</button>
+      </div>
+      <div id="messages" class="messages"></div>
+      <div class="composer">
+        <input id="msgInput" type="text" placeholder="Type a message" />
+        <button id="sendBtn">Send</button>
+      </div>
+    </section>
+
+    <!-- AUDIO/VIDEO PANEL -->
+    <section class="av">
+      <div class="controls">
+        <button id="createCall">Create Call</button>
+        <button id="answerCall">Answer Call</button>
+        <input id="answerRoomId" type="text" placeholder="Enter Room ID to answer" />
+        <button id="hangup">Hang Up</button>
+      </div>
+      <div class="toggles">
+        <button id="toggleCam">Toggle Camera</button>
+        <button id="toggleMic">Toggle Mic</button>
+      </div>
+      <div class="videos">
+        <video id="localVideo" autoplay playsinline muted></video>
+        <video id="remoteVideo" autoplay playsinline></video>
+      </div>
+      <div class="notice">Calls use WebRTC with Firebase for signaling. Share the Room ID with the other participant.</div>
+    </section>
+  </div>
+
+  <!-- Firebase SDKs (Compat for simplicity) -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+
+  <script>
+    // 1) Paste your Firebase config here
+   // Your web app's Firebase configuration
+const firebaseConfig = {
+  apiKey: "AIzaSyAbDUvGSBhVj-YIDVF4Bod2eYNx2uaox_Q",
+  authDomain: "helpsomeones-4a08a.firebaseapp.com",
+  databaseURL: "https://helpsomeones-4a08a-default-rtdb.firebaseio.com",
+  projectId: "helpsomeones-4a08a",
+  storageBucket: "helpsomeones-4a08a.firebasestorage.app",
+  messagingSenderId: "871091320832",
+  appId: "1:871091320832:web:918e4e2f9697788010c0e5"
+};
+
+    // 2) Init Firebase
+    firebase.initializeApp(firebaseConfig);
+    const auth = firebase.auth();
+    const db = firebase.firestore();
+
+    // Utilities
+    const $ = (s) => document.querySelector(s);
+    const messagesEl = $('#messages');
+    const meEl = $('#me');
+    const roomInput = $('#roomId');
+
+    let me = null; // auth user
+    let currentRoomId = null;
+
+    // Sign-in anonymously
+    auth.signInAnonymously().then(() => {
+      me = auth.currentUser;
+      meEl.textContent = `You: ${me.uid.slice(0, 6)}…`;
+      // Default room: value in input (if any)
+      currentRoomId = (roomInput.value || '').trim() || null;
+      if (currentRoomId) subscribeToChat(currentRoomId);
+    });
+
+    // --- CHAT ---
+    function renderMessage(doc) {
+      const data = doc.data();
+      const bubble = document.createElement('div');
+      const mine = data.senderId === me.uid;
+      bubble.className = 'bubble ' + (mine ? 'me' : 'them');
+      bubble.innerHTML = `
+        <div class="text"></div>
+        <span class="meta">${(data.senderId || '').slice(0,6)} · ${data.createdAt?.toDate?.().toLocaleTimeString?.() || ''}</span>
+      `;
+      bubble.querySelector('.text').textContent = data.text;
+      messagesEl.appendChild(bubble);
+      messagesEl.scrollTop = messagesEl.scrollHeight;
+    }
+
+    let chatUnsub = null;
+    function subscribeToChat(roomId){
+      if (chatUnsub) chatUnsub();
+      messagesEl.innerHTML = '';
+      chatUnsub = db.collection('rooms').doc(roomId).collection('messages')
+        .orderBy('createdAt')
+        .limit(200)
+        .onSnapshot(snap => {
+          messagesEl.innerHTML = '';
+          snap.forEach(renderMessage);
+        });
+    }
+
+    async function ensureRoom(){
+      // use input or create a lightweight room doc
+      let id = (roomInput.value || '').trim();
+      if (!id){
+        const ref = await db.collection('rooms').add({createdAt: firebase.firestore.FieldValue.serverTimestamp()});
+        id = ref.id;
+        roomInput.value = id;
+      }
+      if (currentRoomId !== id){
+        currentRoomId = id;
+        subscribeToChat(currentRoomId);
+      }
+      return id;
+    }
+
+    $('#sendBtn').addEventListener('click', async () => {
+      const text = ($('#msgInput').value || '').trim();
+      if (!text) return;
+      const roomId = await ensureRoom();
+      await db.collection('rooms').doc(roomId).collection('messages').add({
+        text, senderId: me.uid,
+        createdAt: firebase.firestore.FieldValue.serverTimestamp()
+      });
+      $('#msgInput').value = '';
+    });
+
+    $('#msgInput').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') $('#sendBtn').click();
+    });
+
+    $('#copyRoom').addEventListener('click', async () => {
+      const id = await ensureRoom();
+      try { await navigator.clipboard.writeText(id); alert('Room ID copied'); } catch {}
+    });
+
+    // --- CALLS (WebRTC + Firestore signaling) ---
+    const servers = { iceServers: [{ urls: [ 'stun:stun.l.google.com:19302' ] }] };
+    let pc = null;
+    let localStream = null;
+    let remoteStream = null;
+    let roomRef = null;
+    let callerCandidatesCollection = null;
+    let calleeCandidatesCollection = null;
+
+    const localVideo = $('#localVideo');
+    const remoteVideo = $('#remoteVideo');
+
+    async function openMediaIfNeeded(withVideo=true){
+      if (localStream) return;
+      localStream = await navigator.mediaDevices.getUserMedia({video: withVideo, audio: true});
+      localVideo.srcObject = localStream;
+      remoteStream = new MediaStream();
+      remoteVideo.srcObject = remoteStream;
+    }
+
+    function createPeer(){
+      pc = new RTCPeerConnection(servers);
+      // Push tracks to peer connection
+      localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
+      // Pull remote tracks
+      pc.ontrack = (event) => { event.streams[0].getTracks().forEach(t => remoteStream.addTrack(t)); };
+      // ICE candidates
+      pc.onicecandidate = async (event) => {
+        if (!event.candidate) return;
+        const target = roomRef && pc.localDescription?.type === 'offer' ? 'callerCandidates' : 'calleeCandidates';
+        const col = db.collection('rooms').doc(roomRef.id).collection(target);
+        await col.add(event.candidate.toJSON());
+      };
+    }
+
+    async function createCall(){
+      await openMediaIfNeeded(true);
+      await ensureRoom();
+      // Create/ensure a room doc for signaling
+      if (!roomInput.value){
+        const rr = await db.collection('rooms').add({ createdAt: firebase.firestore.FieldValue.serverTimestamp() });
+        roomInput.value = rr.id;
+      }
+      roomRef = db.collection('rooms').doc(roomInput.value);
+      callerCandidatesCollection = roomRef.collection('callerCandidates');
+      calleeCandidatesCollection = roomRef.collection('calleeCandidates');
+
+      createPeer();
+
+      const offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
+      await roomRef.set({ offer });
+
+      // Listen for answer
+      roomRef.onSnapshot(async (snapshot) => {
+        const data = snapshot.data();
+        if (!pc.currentRemoteDescription && data?.answer){
+          await pc.setRemoteDescription(new RTCSessionDescription(data.answer));
+        }
+      });
+
+      // Listen for remote ICE candidates
+      calleeCandidatesCollection.onSnapshot((snapshot) => {
+        snapshot.docChanges().forEach((change) => {
+          if (change.type === 'added') {
+            const candidate = new RTCIceCandidate(change.doc.data());
+            pc.addIceCandidate(candidate);
+          }
+        });
+      });
+
+      alert('Call created. Share Room ID: ' + roomRef.id);
+    }
+
+    async function answerCall(){
+      await openMediaIfNeeded(true);
+      const id = ($('#answerRoomId').value || roomInput.value || '').trim();
+      if (!id) return alert('Enter a Room ID to answer');
+      roomRef = db.collection('rooms').doc(id);
+      const roomSnapshot = await roomRef.get();
+      if (!roomSnapshot.exists) return alert('Room not found');
+
+      callerCandidatesCollection = roomRef.collection('callerCandidates');
+      calleeCandidatesCollection = roomRef.collection('calleeCandidates');
+
+      createPeer();
+
+      const offer = roomSnapshot.data().offer;
+      await pc.setRemoteDescription(new RTCSessionDescription(offer));
+      const answer = await pc.createAnswer();
+      await pc.setLocalDescription(answer);
+      await roomRef.update({ answer });
+
+      // Listen for remote ICE candidates
+      callerCandidatesCollection.onSnapshot((snapshot) => {
+        snapshot.docChanges().forEach((change) => {
+          if (change.type === 'added') {
+            const candidate = new RTCIceCandidate(change.doc.data());
+            pc.addIceCandidate(candidate);
+          }
+        });
+      });
+
+      // Also listen for additional room updates if needed
+      roomRef.onSnapshot((snap) => {/* reserved for future */});
+
+      // Sync chat to this room too
+      roomInput.value = id;
+      ensureRoom();
+    }
+
+    async function hangup(){
+      try {
+        if (pc) { pc.getSenders().forEach(s=>s.track&&s.track.stop()); pc.close(); }
+      } catch {}
+      pc = null;
+      localStream = null;
+      remoteStream = null;
+      localVideo.srcObject = null;
+      remoteVideo.srcObject = null;
+      if (roomRef){
+        // Clean up signaling data (optional, best-effort)
+        const batches = [];
+        for (const col of ['callerCandidates','calleeCandidates','messages']){
+          batches.push(roomRef.collection(col).get().then(snap => Promise.all(snap.docs.map(d=>d.ref.delete()))));
+        }
+        Promise.all(batches).then(()=>roomRef.delete()).catch(()=>{});
+      }
+      roomRef = null;
+    }
+
+    // Toggle camera/mic
+    function toggleTrack(kind){
+      if (!localVideo.srcObject) return;
+      const tracks = localVideo.srcObject.getTracks().filter(t=>t.kind===kind);
+      tracks.forEach(t => t.enabled = !t.enabled);
+    }
+
+    // UI events
+    $('#createCall').addEventListener('click', createCall);
+    $('#answerCall').addEventListener('click', answerCall);
+    $('#hangup').addEventListener('click', hangup);
+    $('#toggleCam').addEventListener('click', ()=>toggleTrack('video'));
+    $('#toggleMic').addEventListener('click', ()=>toggleTrack('audio'));
+  </script>
+
+  <!-- Notes:
+    1) Enable Firestore in your Firebase project.
+    2) For local dev, host this file via a simple server (to allow getUserMedia), e.g. `npx serve`.
+    3) This is a minimal demo. For production: auth, presence, typing indicators, read receipts, pagination, better cleanup, and TURN servers for NAT traversal.
+  -->
+</body>
+</html>
