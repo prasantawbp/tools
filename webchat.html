@@ -1,63 +1,422 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Chat + Calls (Firebase)</title>
-  <script src="https://cdn.tailwindcss.com"></script>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ConnectHub - Chat, Audio & Video Calls</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+
+        :root {
+            --primary: #4e54c8;
+            --primary-dark: #3f43a9;
+            --secondary: #8f94fb;
+            --accent: #ff6b6b;
+            --light: #f8f9fa;
+            --dark: #343a40;
+            --gray: #6c757d;
+            --success: #28a745;
+            --warning: #ffc107;
+            --danger: #dc3545;
+            --gradient: linear-gradient(to right, #4e54c8, #8f94fb);
+        }
+
+        body {
+            background: linear-gradient(to right, #ece9e6, #ffffff);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 1200px;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        header {
+            text-align: center;
+            padding: 20px;
+            background: var(--gradient);
+            color: white;
+            border-radius: 12px;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+        }
+
+        header h1 {
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+        }
+
+        header p {
+            font-size: 1.1rem;
+            opacity: 0.9;
+        }
+
+        .main-content {
+            display: flex;
+            gap: 20px;
+            flex-wrap: wrap;
+        }
+
+        .auth-section {
+            flex: 1;
+            min-width: 300px;
+            background: white;
+            border-radius: 12px;
+            padding: 25px;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+        }
+
+        .auth-tabs {
+            display: flex;
+            margin-bottom: 20px;
+            border-bottom: 2px solid #eee;
+        }
+
+        .auth-tab {
+            padding: 12px 20px;
+            cursor: pointer;
+            font-weight: 600;
+            color: var(--gray);
+            transition: all 0.3s;
+        }
+
+        .auth-tab.active {
+            color: var(--primary);
+            border-bottom: 3px solid var(--primary);
+        }
+
+        .auth-form {
+            display: none;
+        }
+
+        .auth-form.active {
+            display: block;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 500;
+            color: var(--dark);
+        }
+
+        .form-group input {
+            width: 100%;
+            padding: 12px 15px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            font-size: 1rem;
+            transition: all 0.3s;
+        }
+
+        .form-group input:focus {
+            border-color: var(--primary);
+            outline: none;
+            box-shadow: 0 0 0 3px rgba(78, 84, 200, 0.2);
+        }
+
+        .btn {
+            padding: 12px 20px;
+            border: none;
+            border-radius: 8px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .btn-primary {
+            background: var(--gradient);
+            color: white;
+            width: 100%;
+        }
+
+        .btn-primary:hover {
+            opacity: 0.9;
+            transform: translateY(-2px);
+        }
+
+        .features-section {
+            flex: 2;
+            min-width: 300px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px;
+        }
+
+        .feature-card {
+            flex: 1;
+            min-width: 250px;
+            background: white;
+            border-radius: 12px;
+            padding: 25px;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+            text-align: center;
+            transition: all 0.3s;
+        }
+
+        .feature-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15);
+        }
+
+        .feature-icon {
+            font-size: 2.5rem;
+            margin-bottom: 15px;
+            color: var(--primary);
+        }
+
+        .feature-card h3 {
+            margin-bottom: 10px;
+            color: var(--dark);
+        }
+
+        .feature-card p {
+            color: var(--gray);
+            line-height: 1.5;
+        }
+
+        .chat-demo {
+            flex-basis: 100%;
+            background: white;
+            border-radius: 12px;
+            padding: 25px;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+            margin-top: 10px;
+        }
+
+        .chat-header {
+            display: flex;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 1px solid #eee;
+        }
+
+        .chat-avatar {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: var(--gradient);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: bold;
+            margin-right: 15px;
+        }
+
+        .chat-messages {
+            height: 200px;
+            overflow-y: auto;
+            margin-bottom: 20px;
+            padding: 10px;
+            background: #f8f9fa;
+            border-radius: 8px;
+        }
+
+        .message {
+            padding: 10px 15px;
+            border-radius: 18px;
+            margin-bottom: 10px;
+            max-width: 80%;
+            word-wrap: break-word;
+        }
+
+        .message.received {
+            background: #e9e9eb;
+            color: var(--dark);
+            border-top-left-radius: 4px;
+        }
+
+        .message.sent {
+            background: var(--primary);
+            color: white;
+            margin-left: auto;
+            border-top-right-radius: 4px;
+        }
+
+        .chat-input {
+            display: flex;
+            gap: 10px;
+        }
+
+        .chat-input input {
+            flex: 1;
+            padding: 12px 15px;
+            border: 1px solid #ddd;
+            border-radius: 24px;
+            font-size: 1rem;
+        }
+
+        .chat-input button {
+            padding: 12px 20px;
+            border: none;
+            border-radius: 24px;
+            background: var(--primary);
+            color: white;
+            cursor: pointer;
+        }
+
+        footer {
+            text-align: center;
+            padding: 20px;
+            color: var(--gray);
+            font-size: 0.9rem;
+        }
+
+        @media (max-width: 768px) {
+            .main-content {
+                flex-direction: column;
+            }
+            
+            .feature-card {
+                min-width: 100%;
+            }
+        }
+    </style>
 </head>
-<body class="bg-gray-900 text-white flex flex-col h-screen">
+<body>
+    <div class="container">
+        <header>
+            <h1><i class="fas fa-comments"></i> ConnectHub</h1>
+            <p>Seamless chatting, audio calls, and video calls in one place</p>
+        </header>
 
-  <!-- Header -->
-  <header class="bg-gray-800 p-4 flex justify-between items-center shadow">
-    <h1 class="text-xl font-bold">Chat + Calls</h1>
-    <div id="authSection" class="space-x-2">
-      <input id="email" type="email" placeholder="Email" class="px-2 py-1 rounded text-black"/>
-      <input id="password" type="password" placeholder="Password" class="px-2 py-1 rounded text-black"/>
-      <button id="signupBtn" class="bg-green-500 px-3 py-1 rounded">Sign Up</button>
-      <button id="loginBtn" class="bg-blue-500 px-3 py-1 rounded">Login</button>
-      <button id="logoutBtn" class="bg-red-500 px-3 py-1 rounded hidden">Logout</button>
+        <div class="main-content">
+            <div class="auth-section">
+                <div class="auth-tabs">
+                    <div class="auth-tab active" onclick="switchTab('login')">Login</div>
+                    <div class="auth-tab" onclick="switchTab('signup')">Sign Up</div>
+                </div>
+
+                <form id="login-form" class="auth-form active">
+                    <div class="form-group">
+                        <label for="login-email">Email</label>
+                        <input type="email" id="login-email" placeholder="Enter your email" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="login-password">Password</label>
+                        <input type="password" id="login-password" placeholder="Enter your password" required>
+                    </div>
+                    <button type="submit" class="btn btn-primary">Login</button>
+                    <p style="text-align: center; margin-top: 15px; color: var(--gray);">
+                        <a href="#" style="color: var(--primary);">Forgot password?</a>
+                    </p>
+                </form>
+
+                <form id="signup-form" class="auth-form">
+                    <div class="form-group">
+                        <label for="signup-name">Full Name</label>
+                        <input type="text" id="signup-name" placeholder="Enter your full name" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="signup-email">Email</label>
+                        <input type="email" id="signup-email" placeholder="Enter your email" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="signup-password">Password</label>
+                        <input type="password" id="signup-password" placeholder="Create a password" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="signup-confirm">Confirm Password</label>
+                        <input type="password" id="signup-confirm" placeholder="Confirm your password" required>
+                    </div>
+                    <button type="submit" class="btn btn-primary">Create Account</button>
+                </form>
+            </div>
+
+            <div class="features-section">
+                <div class="feature-card">
+                    <div class="feature-icon">
+                        <i class="fas fa-comment-dots"></i>
+                    </div>
+                    <h3>Instant Messaging</h3>
+                    <p>Send messages in real-time with read receipts and typing indicators.</p>
+                </div>
+
+                <div class="feature-card">
+                    <div class="feature-icon">
+                        <i class="fas fa-phone"></i>
+                    </div>
+                    <h3>Audio Calls</h3>
+                    <p>Make high-quality audio calls to anyone in your contacts.</p>
+                </div>
+
+                <div class="feature-card">
+                    <div class="feature-icon">
+                        <i class="fas fa-video"></i>
+                    </div>
+                    <h3>Video Calls</h3>
+                    <p>Enjoy HD video calls with screen sharing capabilities.</p>
+                </div>
+
+                <div class="feature-card">
+                    <div class="feature-icon">
+                        <i class="fas fa-lock"></i>
+                    </div>
+                    <h3>Secure & Private</h3>
+                    <p>End-to-end encryption for all your conversations and calls.</p>
+                </div>
+
+                <div class="chat-demo">
+                    <div class="chat-header">
+                        <div class="chat-avatar">JS</div>
+                        <div>
+                            <h3>John Smith</h3>
+                            <p style="color: var(--gray); font-size: 0.9rem;">Online</p>
+                        </div>
+                    </div>
+
+                    <div class="chat-messages">
+                        <div class="message received">
+                            Hi there! How can I help you today?
+                        </div>
+                        <div class="message sent">
+                            I'm interested in your video call feature.
+                        </div>
+                        <div class="message received">
+                            Great! Our video calls support up to 12 people and include screen sharing.
+                        </div>
+                    </div>
+
+                    <div class="chat-input">
+                        <input type="text" placeholder="Type a message...">
+                        <button><i class="fas fa-paper-plane"></i></button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <footer>
+            <p>&copy; 2023 ConnectHub. All rights reserved.</p>
+        </footer>
     </div>
-  </header>
 
-  <!-- Main Layout -->
-  <main class="flex-1 flex">
-    <!-- Chat Section -->
-    <section class="flex-1 flex flex-col border-r border-gray-700">
-      <div id="messages" class="flex-1 overflow-y-auto p-4 space-y-2 bg-gray-950"></div>
-      <div class="p-2 flex bg-gray-800">
-        <input id="msgInput" placeholder="Type a message" class="flex-1 px-3 py-2 rounded text-black" disabled/>
-        <button id="sendBtn" class="bg-blue-600 px-4 ml-2 rounded" disabled>Send</button>
-      </div>
-    </section>
+    <!-- Firebase App (core Firebase SDK) -->
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <!-- Firebase Authentication -->
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
 
-    <!-- Video Call Section -->
-    <section class="w-1/2 flex flex-col items-center p-4 space-y-2">
-      <div class="flex space-x-2">
-        <input id="roomId" placeholder="Room ID" class="px-2 py-1 rounded text-black"/>
-        <button id="copyRoom" class="bg-gray-600 px-3 py-1 rounded">Copy</button>
-      </div>
-      <div class="space-x-2">
-        <button id="createCall" class="bg-green-600 px-4 py-1 rounded" disabled>Create Call</button>
-        <input id="answerRoomId" placeholder="Enter Room ID" class="px-2 py-1 rounded text-black"/>
-        <button id="answerCall" class="bg-blue-600 px-4 py-1 rounded" disabled>Answer</button>
-        <button id="hangup" class="bg-red-600 px-4 py-1 rounded" disabled>Hang Up</button>
-      </div>
-      <div class="flex space-x-4 w-full justify-center">
-        <video id="localVideo" class="w-1/2 rounded bg-black" autoplay playsinline muted></video>
-        <video id="remoteVideo" class="w-1/2 rounded bg-black" autoplay playsinline></video>
-      </div>
-    </section>
-  </main>
-
-  <!-- Firebase SDK -->
-  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
-
-  <script>
-    // ====== Firebase Config (Replace with your own) ======
-   // Your web app's Firebase configuration
+    <script>
+        // Firebase configuration
+       // Your web app's Firebase configuration
 const firebaseConfig = {
   apiKey: "AIzaSyAbDUvGSBhVj-YIDVF4Bod2eYNx2uaox_Q",
   authDomain: "helpsomeones-4a08a.firebaseapp.com",
@@ -67,139 +426,85 @@ const firebaseConfig = {
   messagingSenderId: "871091320832",
   appId: "1:871091320832:web:918e4e2f9697788010c0e5"
 };
-    firebase.initializeApp(firebaseConfig);
-    const auth = firebase.auth();
-    const db = firebase.firestore();
 
-    // DOM Elements
-    const signupBtn=document.getElementById("signupBtn");
-    const loginBtn=document.getElementById("loginBtn");
-    const logoutBtn=document.getElementById("logoutBtn");
-    const msgInput=document.getElementById("msgInput");
-    const sendBtn=document.getElementById("sendBtn");
-    const messages=document.getElementById("messages");
-    const emailInput=document.getElementById("email");
-    const passwordInput=document.getElementById("password");
+        // Initialize Firebase
+        firebase.initializeApp(firebaseConfig);
 
-    let me=null,currentRoom=null,unsubscribe=null;
+        // Auth tab switching
+        function switchTab(tabName) {
+            // Toggle active tab
+            document.querySelectorAll('.auth-tab').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            document.querySelector(`.auth-tab:nth-child(${tabName === 'login' ? 1 : 2})`).classList.add('active');
+            
+            // Toggle active form
+            document.querySelectorAll('.auth-form').forEach(form => {
+                form.classList.remove('active');
+            });
+            document.getElementById(`${tabName}-form`).classList.add('active');
+        }
 
-    // Auth Handlers
-    signupBtn.onclick=()=>auth.createUserWithEmailAndPassword(emailInput.value,passwordInput.value)
-      .catch(err=>alert(err.message));
-    loginBtn.onclick=()=>auth.signInWithEmailAndPassword(emailInput.value,passwordInput.value)
-      .catch(err=>alert(err.message));
-    logoutBtn.onclick=()=>auth.signOut();
-
-    auth.onAuthStateChanged(user=>{
-      me=user;
-      if(user){
-        logoutBtn.classList.remove("hidden");
-        signupBtn.classList.add("hidden");
-        loginBtn.classList.add("hidden");
-        msgInput.disabled=sendBtn.disabled=false;
-        document.getElementById("createCall").disabled=false;
-        document.getElementById("answerCall").disabled=false;
-        document.getElementById("hangup").disabled=false;
-        subscribeChat("default-room");
-      }else{
-        logoutBtn.classList.add("hidden");
-        signupBtn.classList.remove("hidden");
-        loginBtn.classList.remove("hidden");
-        msgInput.disabled=sendBtn.disabled=true;
-      }
-    });
-
-    // Chat
-    function subscribeChat(room){
-      if(unsubscribe)unsubscribe();
-      messages.innerHTML="";
-      unsubscribe=db.collection("rooms").doc(room).collection("messages")
-        .orderBy("createdAt").onSnapshot(s=>{
-          messages.innerHTML="";
-          s.forEach(doc=>{
-            const m=doc.data();
-            const div=document.createElement("div");
-            div.className="p-2 rounded "+(m.uid===me.uid?"bg-blue-700 ml-auto":"bg-gray-700 mr-auto")+" max-w-xs";
-            div.textContent=m.sender+": "+m.text;
-            messages.appendChild(div);
-          });
+        // Form submission handlers
+        document.getElementById('login-form').addEventListener('submit', function(e) {
+            e.preventDefault();
+            const email = document.getElementById('login-email').value;
+            const password = document.getElementById('login-password').value;
+            
+            // Firebase login logic would go here
+            console.log('Login attempt with:', email, password);
+            alert('Login functionality would be implemented with Firebase Auth');
         });
-      currentRoom=room;
-    }
 
-    sendBtn.onclick=()=>{
-      if(!msgInput.value)return;
-      db.collection("rooms").doc(currentRoom).collection("messages").add({
-        text:msgInput.value,
-        uid:me.uid,
-        sender:me.email,
-        createdAt:firebase.firestore.FieldValue.serverTimestamp()
-      });
-      msgInput.value="";
-    };
+        document.getElementById('signup-form').addEventListener('submit', function(e) {
+            e.preventDefault();
+            const name = document.getElementById('signup-name').value;
+            const email = document.getElementById('signup-email').value;
+            const password = document.getElementById('signup-password').value;
+            const confirm = document.getElementById('signup-confirm').value;
+            
+            if (password !== confirm) {
+                alert('Passwords do not match!');
+                return;
+            }
+            
+            // Firebase signup logic would go here
+            console.log('Signup attempt with:', name, email, password);
+            alert('Signup functionality would be implemented with Firebase Auth');
+        });
 
-    // WebRTC Calls
-    const servers={iceServers:[{urls:["stun:stun.l.google.com:19302"]}]};
-    let pc,localStream,remoteStream,roomRef;
+        // Chat demo functionality
+        const chatInput = document.querySelector('.chat-input input');
+        const chatMessages = document.querySelector('.chat-messages');
 
-    async function openMedia(){
-      if(localStream)return;
-      localStream=await navigator.mediaDevices.getUserMedia({video:true,audio:true});
-      document.getElementById("localVideo").srcObject=localStream;
-      remoteStream=new MediaStream();
-      document.getElementById("remoteVideo").srcObject=remoteStream;
-    }
-    function createPeer(){
-      pc=new RTCPeerConnection(servers);
-      localStream.getTracks().forEach(t=>pc.addTrack(t,localStream));
-      pc.ontrack=e=>e.streams[0].getTracks().forEach(t=>remoteStream.addTrack(t));
-      pc.onicecandidate=e=>{
-        if(e.candidate){
-          roomRef.collection(pc.localDescription.type==='offer'?'callerCandidates':'calleeCandidates')
-                 .add(e.candidate.toJSON());
+        chatInput.addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                sendMessage();
+            }
+        });
+
+        document.querySelector('.chat-input button').addEventListener('click', sendMessage);
+
+        function sendMessage() {
+            const message = chatInput.value.trim();
+            if (message) {
+                const messageElement = document.createElement('div');
+                messageElement.classList.add('message', 'sent');
+                messageElement.textContent = message;
+                chatMessages.appendChild(messageElement);
+                chatInput.value = '';
+                chatMessages.scrollTop = chatMessages.scrollHeight;
+                
+                // Simulate reply after a short delay
+                setTimeout(() => {
+                    const replyElement = document.createElement('div');
+                    replyElement.classList.add('message', 'received');
+                    replyElement.textContent = "Thanks for your message! This is a demo chat.";
+                    chatMessages.appendChild(replyElement);
+                    chatMessages.scrollTop = chatMessages.scrollHeight;
+                }, 1000);
+            }
         }
-      };
-    }
-    async function createCall(){
-      await openMedia();
-      roomRef=db.collection("rooms").doc((Math.random()*1e8).toFixed(0));
-      createPeer();
-      const offer=await pc.createOffer();await pc.setLocalDescription(offer);
-      await roomRef.set({offer});
-      roomRef.onSnapshot(async snap=>{
-        const data=snap.data();
-        if(data?.answer && !pc.currentRemoteDescription){
-          await pc.setRemoteDescription(new RTCSessionDescription(data.answer));
-        }
-      });
-      roomRef.collection("calleeCandidates").onSnapshot(s=>s.docChanges()
-        .forEach(c=>pc.addIceCandidate(new RTCIceCandidate(c.doc.data()))));
-      alert("Share this Room ID: "+roomRef.id);
-    }
-    async function answerCall(){
-      await openMedia();
-      const id=document.getElementById("answerRoomId").value.trim();
-      roomRef=db.collection("rooms").doc(id);
-      const snap=await roomRef.get();
-      if(!snap.exists)return alert("Room not found");
-      createPeer();
-      await pc.setRemoteDescription(new RTCSessionDescription(snap.data().offer));
-      const answer=await pc.createAnswer();await pc.setLocalDescription(answer);
-      await roomRef.update({answer});
-      roomRef.collection("callerCandidates").onSnapshot(s=>s.docChanges()
-        .forEach(c=>pc.addIceCandidate(new RTCIceCandidate(c.doc.data()))));
-    }
-    function hangup(){
-      if(pc)pc.close();
-      pc=null;localStream=null;remoteStream=null;
-      document.getElementById("localVideo").srcObject=null;
-      document.getElementById("remoteVideo").srcObject=null;
-    }
-
-    document.getElementById("createCall").onclick=createCall;
-    document.getElementById("answerCall").onclick=answerCall;
-    document.getElementById("hangup").onclick=hangup;
-    document.getElementById("copyRoom").onclick=()=>navigator.clipboard.writeText(currentRoom||"");
-  </script>
+    </script>
 </body>
 </html>
