@@ -1,9 +1,9 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Chat + AV Calls</title>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>WhatsApp-like Chat + AV Calls (Firebase + Google Sign-In)</title>
   <style>
     :root{--bg:#0b141a;--panel:#111b21;--panel-2:#202c33;--accent:#00a884;--text:#e9edef;--muted:#8696a0;--bubble:#005c4b;--bubble-me:#1f2c34}
     *{box-sizing:border-box}
@@ -11,7 +11,8 @@
     .app{display:grid;grid-template-columns: 1.6fr 1.2fr;min-height:100dvh}
     header{grid-column:1/-1;background:var(--panel-2);display:flex;align-items:center;gap:.75rem;padding:.75rem 1rem;border-bottom:1px solid #24323a}
     header .title{font-weight:700}
-    header .me{margin-left:auto;font-size:.9rem;color:var(--muted)}
+    header .me{margin-left:auto;font-size:.9rem;color:var(--muted);display:flex;gap:.5rem;align-items:center}
+    .btn{background:var(--accent);border:none;color:#043d36;padding:.4rem .6rem;border-radius:8px;cursor:pointer;font-weight:700}
 
     .chat{display:flex;flex-direction:column;border-right:1px solid #24323a}
     .chat__toolbar{background:var(--panel);padding:.5rem 1rem;display:flex;align-items:center;gap:.5rem}
@@ -49,7 +50,13 @@
   <div class="app">
     <header>
       <div class="title">WhatsApp‑like Chat + Calls</div>
-      <div class="me" id="me"></div>
+      <div class="me" id="me">
+        <button id="signInBtn" class="btn">Sign in with Google</button>
+        <div id="userInfo" style="display:none;align-items:center;gap:.5rem;">
+          <span id="userName"></span>
+          <button id="signOutBtn" class="btn" style="background:#c62828;color:#fff">Sign out</button>
+        </div>
+      </div>
     </header>
 
     <!-- CHAT PANEL -->
@@ -60,22 +67,22 @@
       </div>
       <div id="messages" class="messages"></div>
       <div class="composer">
-        <input id="msgInput" type="text" placeholder="Type a message" />
-        <button id="sendBtn">Send</button>
+        <input id="msgInput" type="text" placeholder="Type a message (sign in required)" disabled />
+        <button id="sendBtn" disabled>Send</button>
       </div>
     </section>
 
     <!-- AUDIO/VIDEO PANEL -->
     <section class="av">
       <div class="controls">
-        <button id="createCall">Create Call</button>
-        <button id="answerCall">Answer Call</button>
+        <button id="createCall" disabled>Create Call</button>
+        <button id="answerCall" disabled>Answer Call</button>
         <input id="answerRoomId" type="text" placeholder="Enter Room ID to answer" />
-        <button id="hangup">Hang Up</button>
+        <button id="hangup" disabled>Hang Up</button>
       </div>
       <div class="toggles">
-        <button id="toggleCam">Toggle Camera</button>
-        <button id="toggleMic">Toggle Mic</button>
+        <button id="toggleCam" disabled>Toggle Camera</button>
+        <button id="toggleMic" disabled>Toggle Mic</button>
       </div>
       <div class="videos">
         <video id="localVideo" autoplay playsinline muted></video>
@@ -91,7 +98,7 @@
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 
   <script>
-    // 1) Paste your Firebase config here
+    // ====== 1) Paste your Firebase config here ======
    // Your web app's Firebase configuration
 const firebaseConfig = {
   apiKey: "AIzaSyAbDUvGSBhVj-YIDVF4Bod2eYNx2uaox_Q",
@@ -103,46 +110,90 @@ const firebaseConfig = {
   appId: "1:871091320832:web:918e4e2f9697788010c0e5"
 };
 
-    // 2) Init Firebase
+    // Init Firebase
     firebase.initializeApp(firebaseConfig);
     const auth = firebase.auth();
     const db = firebase.firestore();
 
-    // Utilities
-    const $ = (s) => document.querySelector(s);
-    const messagesEl = $('#messages');
-    const meEl = $('#me');
-    const roomInput = $('#roomId');
+    // UI refs
+    const signInBtn = document.getElementById('signInBtn');
+    const signOutBtn = document.getElementById('signOutBtn');
+    const userInfo = document.getElementById('userInfo');
+    const userName = document.getElementById('userName');
+    const msgInput = document.getElementById('msgInput');
+    const sendBtn = document.getElementById('sendBtn');
+    const createCallBtn = document.getElementById('createCall');
+    const answerCallBtn = document.getElementById('answerCall');
+    const hangupBtn = document.getElementById('hangup');
+    const toggleCamBtn = document.getElementById('toggleCam');
+    const toggleMicBtn = document.getElementById('toggleMic');
 
-    let me = null; // auth user
+    const messagesEl = document.getElementById('messages');
+
+    // State
+    let me = null;
     let currentRoomId = null;
+    let chatUnsub = null;
 
-    // Sign-in anonymously
-    auth.signInAnonymously().then(() => {
-      me = auth.currentUser;
-      meEl.textContent = `You: ${me.uid.slice(0, 6)}…`;
-      // Default room: value in input (if any)
-      currentRoomId = (roomInput.value || '').trim() || null;
-      if (currentRoomId) subscribeToChat(currentRoomId);
+    // ----- AUTH: Google Sign-In -----
+    const provider = new firebase.auth.GoogleAuthProvider();
+
+    signInBtn.addEventListener('click', async () => {
+      try {
+        await auth.signInWithPopup(provider);
+      } catch (e) { alert('Sign-in failed: ' + e.message); }
     });
 
+    signOutBtn.addEventListener('click', async () => { await auth.signOut(); });
+
+    auth.onAuthStateChanged(user => {
+      me = user;
+      if (user){
+        signInBtn.style.display = 'none';
+        userInfo.style.display = 'flex';
+        userName.textContent = user.displayName ? user.displayName + ' (' + user.email + ')' : user.email;
+        enableUIForSignedIn(true);
+        // If room already set in input, subscribe
+        const id = (document.getElementById('roomId').value || '').trim();
+        if (id) subscribeToChat(id);
+      } else {
+        signInBtn.style.display = 'inline-block';
+        userInfo.style.display = 'none';
+        userName.textContent = '';
+        enableUIForSignedIn(false);
+        // clean messages view and unsub
+        if (chatUnsub) { chatUnsub(); chatUnsub = null; }
+        messagesEl.innerHTML = '<div style="padding:1rem;color:var(--muted)">Sign in with Google to start chatting and calling.</div>';
+      }
+    });
+
+    function enableUIForSignedIn(on){
+      msgInput.disabled = !on;
+      sendBtn.disabled = !on;
+      createCallBtn.disabled = !on;
+      answerCallBtn.disabled = !on;
+      hangupBtn.disabled = !on;
+      toggleCamBtn.disabled = !on;
+      toggleMicBtn.disabled = !on;
+    }
+
     // --- CHAT ---
-    function renderMessage(doc) {
+    function renderMessage(doc){
       const data = doc.data();
       const bubble = document.createElement('div');
       const mine = data.senderId === me.uid;
       bubble.className = 'bubble ' + (mine ? 'me' : 'them');
       bubble.innerHTML = `
         <div class="text"></div>
-        <span class="meta">${(data.senderId || '').slice(0,6)} · ${data.createdAt?.toDate?.().toLocaleTimeString?.() || ''}</span>
+        <span class="meta">${(data.senderName||'').slice(0,20)} · ${(data.createdAt && data.createdAt.toDate) ? data.createdAt.toDate().toLocaleTimeString() : ''}</span>
       `;
       bubble.querySelector('.text').textContent = data.text;
       messagesEl.appendChild(bubble);
       messagesEl.scrollTop = messagesEl.scrollHeight;
     }
 
-    let chatUnsub = null;
     function subscribeToChat(roomId){
+      if (!me) return; // require auth
       if (chatUnsub) chatUnsub();
       messagesEl.innerHTML = '';
       chatUnsub = db.collection('rooms').doc(roomId).collection('messages')
@@ -155,12 +206,12 @@ const firebaseConfig = {
     }
 
     async function ensureRoom(){
-      // use input or create a lightweight room doc
-      let id = (roomInput.value || '').trim();
+      if (!me) throw new Error('Sign in required');
+      let id = (document.getElementById('roomId').value || '').trim();
       if (!id){
-        const ref = await db.collection('rooms').add({createdAt: firebase.firestore.FieldValue.serverTimestamp()});
+        const ref = await db.collection('rooms').add({createdAt: firebase.firestore.FieldValue.serverTimestamp(), owner: me.uid});
         id = ref.id;
-        roomInput.value = id;
+        document.getElementById('roomId').value = id;
       }
       if (currentRoomId !== id){
         currentRoomId = id;
@@ -169,25 +220,21 @@ const firebaseConfig = {
       return id;
     }
 
-    $('#sendBtn').addEventListener('click', async () => {
-      const text = ($('#msgInput').value || '').trim();
+    sendBtn.addEventListener('click', async () => {
+      if (!me) return alert('Please sign in');
+      const text = (msgInput.value || '').trim();
       if (!text) return;
       const roomId = await ensureRoom();
       await db.collection('rooms').doc(roomId).collection('messages').add({
-        text, senderId: me.uid,
+        text, senderId: me.uid, senderName: me.displayName || me.email,
         createdAt: firebase.firestore.FieldValue.serverTimestamp()
       });
-      $('#msgInput').value = '';
+      msgInput.value = '';
     });
 
-    $('#msgInput').addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') $('#sendBtn').click();
-    });
+    msgInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') sendBtn.click(); });
 
-    $('#copyRoom').addEventListener('click', async () => {
-      const id = await ensureRoom();
-      try { await navigator.clipboard.writeText(id); alert('Room ID copied'); } catch {}
-    });
+    document.getElementById('copyRoom').addEventListener('click', async () => { try { const id = await ensureRoom(); await navigator.clipboard.writeText(id); alert('Room ID copied'); } catch (e) { alert(e.message); } });
 
     // --- CALLS (WebRTC + Firestore signaling) ---
     const servers = { iceServers: [{ urls: [ 'stun:stun.l.google.com:19302' ] }] };
@@ -198,8 +245,8 @@ const firebaseConfig = {
     let callerCandidatesCollection = null;
     let calleeCandidatesCollection = null;
 
-    const localVideo = $('#localVideo');
-    const remoteVideo = $('#remoteVideo');
+    const localVideo = document.getElementById('localVideo');
+    const remoteVideo = document.getElementById('remoteVideo');
 
     async function openMediaIfNeeded(withVideo=true){
       if (localStream) return;
@@ -225,14 +272,15 @@ const firebaseConfig = {
     }
 
     async function createCall(){
+      if (!me) return alert('Please sign in to start a call');
       await openMediaIfNeeded(true);
       await ensureRoom();
       // Create/ensure a room doc for signaling
-      if (!roomInput.value){
-        const rr = await db.collection('rooms').add({ createdAt: firebase.firestore.FieldValue.serverTimestamp() });
-        roomInput.value = rr.id;
+      if (!document.getElementById('roomId').value){
+        const rr = await db.collection('rooms').add({ createdAt: firebase.firestore.FieldValue.serverTimestamp(), owner: me.uid });
+        document.getElementById('roomId').value = rr.id;
       }
-      roomRef = db.collection('rooms').doc(roomInput.value);
+      roomRef = db.collection('rooms').doc(document.getElementById('roomId').value);
       callerCandidatesCollection = roomRef.collection('callerCandidates');
       calleeCandidatesCollection = roomRef.collection('calleeCandidates');
 
@@ -261,11 +309,13 @@ const firebaseConfig = {
       });
 
       alert('Call created. Share Room ID: ' + roomRef.id);
+      hangupBtn.disabled = false;
     }
 
     async function answerCall(){
+      if (!me) return alert('Please sign in to answer a call');
       await openMediaIfNeeded(true);
-      const id = ($('#answerRoomId').value || roomInput.value || '').trim();
+      const id = (document.getElementById('answerRoomId').value || document.getElementById('roomId').value || '').trim();
       if (!id) return alert('Enter a Room ID to answer');
       roomRef = db.collection('rooms').doc(id);
       const roomSnapshot = await roomRef.get();
@@ -296,15 +346,17 @@ const firebaseConfig = {
       roomRef.onSnapshot((snap) => {/* reserved for future */});
 
       // Sync chat to this room too
-      roomInput.value = id;
+      document.getElementById('roomId').value = id;
       ensureRoom();
+      hangupBtn.disabled = false;
     }
 
     async function hangup(){
       try {
         if (pc) { pc.getSenders().forEach(s=>s.track&&s.track.stop()); pc.close(); }
-      } catch {}
+      } catch (e) { /* ignore */ }
       pc = null;
+      if (localStream){ localStream.getTracks().forEach(t=>t.stop()); }
       localStream = null;
       remoteStream = null;
       localVideo.srcObject = null;
@@ -318,9 +370,9 @@ const firebaseConfig = {
         Promise.all(batches).then(()=>roomRef.delete()).catch(()=>{});
       }
       roomRef = null;
+      hangupBtn.disabled = true;
     }
 
-    // Toggle camera/mic
     function toggleTrack(kind){
       if (!localVideo.srcObject) return;
       const tracks = localVideo.srcObject.getTracks().filter(t=>t.kind===kind);
@@ -328,17 +380,17 @@ const firebaseConfig = {
     }
 
     // UI events
-    $('#createCall').addEventListener('click', createCall);
-    $('#answerCall').addEventListener('click', answerCall);
-    $('#hangup').addEventListener('click', hangup);
-    $('#toggleCam').addEventListener('click', ()=>toggleTrack('video'));
-    $('#toggleMic').addEventListener('click', ()=>toggleTrack('audio'));
+    createCallBtn.addEventListener('click', createCall);
+    answerCallBtn.addEventListener('click', answerCall);
+    hangupBtn.addEventListener('click', hangup);
+    toggleCamBtn.addEventListener('click', ()=>toggleTrack('video'));
+    toggleMicBtn.addEventListener('click', ()=>toggleTrack('audio'));
   </script>
 
   <!-- Notes:
-    1) Enable Firestore in your Firebase project.
-    2) For local dev, host this file via a simple server (to allow getUserMedia), e.g. `npx serve`.
-    3) This is a minimal demo. For production: auth, presence, typing indicators, read receipts, pagination, better cleanup, and TURN servers for NAT traversal.
+    1) Enable Firestore and Google Sign-In in your Firebase console.
+    2) Add your app's origin to OAuth authorized domains in Firebase Auth settings.
+    3) For production: add TURN servers, better authentication UX, secure rules, pagination, presence, typing indicators, and improved cleanup.
   -->
 </body>
 </html>
