@@ -1,66 +1,124 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8"/>
-  <meta name="viewport" content="width=device-width,initial-scale=1"/>
-  <title>Chat + Video/Audio Calls (Firebase + Gmail Login)</title>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Beautiful Chat & Calls — Firebase Auth (Email)</title>
+  <script src="https://cdn.tailwindcss.com"></script>
   <style>
-    body{margin:0;font-family:sans-serif;background:#0b141a;color:#e9edef;}
-    header{background:#202c33;padding:10px;display:flex;justify-content:space-between;align-items:center;}
-    button{background:#00a884;border:none;padding:6px 12px;border-radius:6px;color:#fff;cursor:pointer;}
-    #messages{height:200px;overflow:auto;background:#111b21;padding:10px;}
-    .bubble{padding:6px 10px;border-radius:8px;margin:5px 0;max-width:70%;}
-    .me{background:#005c4b;margin-left:auto;}
-    .them{background:#1f2c34;}
-    .composer{display:flex;padding:5px;background:#111b21;}
-    .composer input{flex:1;padding:8px;border-radius:6px;border:1px solid #333;background:#0f191f;color:#fff;}
-    video{width:45%;background:#000;margin:5px;border-radius:8px;}
+    /* small polishing beyond Tailwind */
+    .scroll-smooth { scroll-behavior: smooth; }
+    .bubble { max-width: 78%; word-break: break-word; white-space: pre-wrap; }
   </style>
 </head>
-<body>
-  <header>
-    <div><b>Chat + Calls</b></div>
-    <div id="auth">
-      <button id="signIn">Sign in with Gmail</button>
-      <span id="userInfo" style="display:none;">
-        <span id="userName"></span>
-        <button id="signOut">Sign out</button>
-      </span>
+<body class="bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-slate-100 min-h-screen flex flex-col">
+
+  <!-- HEADER -->
+  <header class="flex items-center justify-between p-4 border-b border-slate-700">
+    <div class="flex items-center gap-3">
+      <div class="w-12 h-12 bg-emerald-500 rounded-full flex items-center justify-center text-slate-900 font-bold">C+</div>
+      <div>
+        <h1 class="text-lg font-semibold">Chat & Video Calls</h1>
+        <p class="text-sm text-slate-400">Email signup • Firestore chat • WebRTC calls</p>
+      </div>
+    </div>
+
+    <div id="authArea" class="flex items-center gap-3">
+      <!-- auth UI will be controlled by JS -->
+      <div id="signedOutUI" class="flex items-center gap-2">
+        <input id="authEmail" type="email" placeholder="Email" class="px-3 py-2 rounded bg-slate-800 text-slate-100 border border-slate-700" />
+        <input id="authPassword" type="password" placeholder="Password" class="px-3 py-2 rounded bg-slate-800 text-slate-100 border border-slate-700" />
+        <button id="signupBtn" class="px-3 py-2 rounded bg-emerald-500 text-slate-900 font-semibold">Sign up</button>
+        <button id="loginBtn" class="px-3 py-2 rounded bg-blue-600 text-white font-medium">Login</button>
+      </div>
+
+      <div id="signedInUI" class="hidden items-center gap-3">
+        <div class="text-sm text-slate-300" id="userBadge">Signed in</div>
+        <button id="signOutBtn" class="px-3 py-2 rounded bg-rose-500 text-white">Sign out</button>
+      </div>
     </div>
   </header>
 
-  <!-- Room controls -->
-  <div>
-    <input id="roomId" placeholder="Room ID (for chat & calls)"/>
-    <button id="copyRoom">Copy</button>
-  </div>
+  <!-- LAYOUT -->
+  <main class="flex-1 grid grid-cols-1 lg:grid-cols-3 gap-4 p-4">
+    <!-- LEFT: CONTACTS / Room -->
+    <section class="lg:col-span-1 bg-slate-800 rounded-lg p-4 shadow">
+      <h2 class="font-semibold mb-2">Room & Presence</h2>
 
-  <!-- Chat -->
-  <div id="messages"></div>
-  <div class="composer">
-    <input id="msgInput" placeholder="Type message" disabled/>
-    <button id="sendBtn" disabled>Send</button>
-  </div>
+      <label class="block text-sm text-slate-300 mb-1">Room ID</label>
+      <div class="flex gap-2 mb-3">
+        <input id="roomIdInput" class="flex-1 px-3 py-2 rounded bg-slate-900 border border-slate-700 text-slate-100" placeholder="Leave blank to auto-create" />
+        <button id="copyRoomBtn" class="px-3 py-2 rounded bg-slate-700 text-slate-200">Copy</button>
+      </div>
 
-  <!-- Call controls -->
-  <div>
-    <button id="createCall" disabled>Create Call</button>
-    <button id="answerCall" disabled>Answer Call</button>
-    <input id="answerRoomId" placeholder="Enter Room ID"/>
-    <button id="hangup" disabled>Hang Up</button>
-  </div>
-  <div>
-    <video id="localVideo" autoplay playsinline muted></video>
-    <video id="remoteVideo" autoplay playsinline></video>
-  </div>
+      <div class="text-sm text-slate-400 mb-3">
+        Tip: create a call to generate a room ID, or enter a room ID you received.
+      </div>
 
-  <!-- Firebase SDKs -->
+      <div class="mt-4">
+        <h3 class="font-medium text-slate-200 mb-2">Controls</h3>
+        <div class="grid grid-cols-2 gap-2">
+          <button id="createCallBtn" class="py-2 rounded bg-emerald-500 text-slate-900 disabled:opacity-40" disabled>Create Call</button>
+          <button id="answerCallBtn" class="py-2 rounded bg-blue-600 disabled:opacity-40" disabled>Answer Call</button>
+          <button id="hangupBtn" class="py-2 rounded bg-rose-600 disabled:opacity-40" disabled>Hang Up</button>
+          <button id="toggleCamBtn" class="py-2 rounded bg-slate-700 disabled:opacity-40" disabled>Toggle Cam</button>
+        </div>
+      </div>
+
+      <div class="mt-6 text-sm text-slate-400">
+        <strong>Local status:</strong>
+        <div id="statusText" class="mt-2">Not signed in</div>
+      </div>
+    </section>
+
+    <!-- MIDDLE: Chat -->
+    <section class="lg:col-span-1 bg-slate-800 rounded-lg p-4 shadow flex flex-col">
+      <h2 class="font-semibold mb-2">Chat</h2>
+
+      <div id="messages" class="flex-1 overflow-auto p-3 space-y-3 bg-slate-900 rounded scroll-smooth" style="min-height:320px;">
+        <div class="text-sm text-slate-500">Sign up / login to start chatting. Room binds chat and call.</div>
+      </div>
+
+      <div class="mt-3 flex gap-2">
+        <input id="messageInput" class="flex-1 px-3 py-2 rounded bg-slate-900 border border-slate-700 text-slate-100" placeholder="Type a message" disabled />
+        <button id="sendMsgBtn" class="px-4 py-2 rounded bg-indigo-600 disabled:opacity-40" disabled>Send</button>
+      </div>
+    </section>
+
+    <!-- RIGHT: Video -->
+    <section class="lg:col-span-1 bg-slate-800 rounded-lg p-4 shadow flex flex-col items-center">
+      <h2 class="font-semibold mb-2">Video</h2>
+      <div class="w-full flex gap-3">
+        <video id="localVideo" autoplay playsinline muted class="w-1/2 bg-black rounded"></video>
+        <video id="remoteVideo" autoplay playsinline class="w-1/2 bg-black rounded"></video>
+      </div>
+
+      <div class="mt-4 w-full grid grid-cols-2 gap-2">
+        <button id="muteAudioBtn" class="py-2 rounded bg-slate-700 disabled:opacity-40" disabled>Mute Mic</button>
+        <button id="swapCamBtn" class="py-2 rounded bg-slate-700 disabled:opacity-40" disabled>Swap Camera</button>
+      </div>
+
+      <div class="mt-4 text-xs text-slate-400 text-center">
+        WebRTC uses STUN by default. For production add TURN servers for reliable connections behind strict NATs.
+      </div>
+    </section>
+  </main>
+
+  <!-- FOOTER -->
+  <footer class="p-3 text-center text-xs text-slate-500">
+    Built with Firebase • Replace the firebaseConfig object with your project's keys below.
+  </footer>
+
+  <!-- Firebase SDKs (compat easier for single-file demos) -->
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 
   <script>
-    // ====== Paste your Firebase config here ======
+    /*********************************************
+     *  REPLACE ONLY the firebaseConfig block below
+     *  with your Firebase project's configuration.
+     *********************************************/
    // Your web app's Firebase configuration
 const firebaseConfig = {
   apiKey: "AIzaSyAbDUvGSBhVj-YIDVF4Bod2eYNx2uaox_Q",
@@ -71,130 +129,394 @@ const firebaseConfig = {
   messagingSenderId: "871091320832",
   appId: "1:871091320832:web:918e4e2f9697788010c0e5"
 };
+    /*********************************************/
+
+    // Initialize Firebase
     firebase.initializeApp(firebaseConfig);
     const auth = firebase.auth();
     const db = firebase.firestore();
 
-    // DOM elements
-    const signInBtn = document.getElementById("signIn");
-    const signOutBtn = document.getElementById("signOut");
-    const userInfo = document.getElementById("userInfo");
-    const userName = document.getElementById("userName");
-    const msgInput = document.getElementById("msgInput");
-    const sendBtn = document.getElementById("sendBtn");
-    const messagesEl = document.getElementById("messages");
-    const roomInput = document.getElementById("roomId");
+    // UI refs
+    const signedOutUI = document.getElementById('signedOutUI');
+    const signedInUI = document.getElementById('signedInUI');
+    const signupBtn = document.getElementById('signupBtn');
+    const loginBtn = document.getElementById('loginBtn');
+    const signOutBtn = document.getElementById('signOutBtn');
+    const authEmail = document.getElementById('authEmail');
+    const authPassword = document.getElementById('authPassword');
 
-    let me=null, currentRoomId=null, unsub=null;
+    const statusText = document.getElementById('statusText');
+    const userBadge = document.getElementById('userBadge');
 
-    // Auth (Google provider → Gmail login)
-    const provider = new firebase.auth.GoogleAuthProvider();
-    provider.setCustomParameters({prompt:"select_account"});
-    signInBtn.onclick = ()=>auth.signInWithPopup(provider);
-    signOutBtn.onclick = ()=>auth.signOut();
-    auth.onAuthStateChanged(user=>{
-      me=user;
-      if(user){
-        signInBtn.style.display="none";
-        userInfo.style.display="inline";
-        userName.textContent=user.displayName||user.email;
-        enableUI(true);
+    const roomIdInput = document.getElementById('roomIdInput');
+    const copyRoomBtn = document.getElementById('copyRoomBtn');
+
+    const createCallBtn = document.getElementById('createCallBtn');
+    const answerCallBtn = document.getElementById('answerCallBtn');
+    const hangupBtn = document.getElementById('hangupBtn');
+    const toggleCamBtn = document.getElementById('toggleCamBtn');
+
+    const messagesEl = document.getElementById('messages');
+    const messageInput = document.getElementById('messageInput');
+    const sendMsgBtn = document.getElementById('sendMsgBtn');
+
+    const localVideo = document.getElementById('localVideo');
+    const remoteVideo = document.getElementById('remoteVideo');
+    const muteAudioBtn = document.getElementById('muteAudioBtn');
+    const swapCamBtn = document.getElementById('swapCamBtn');
+
+    // App state
+    let currentUser = null;
+    let currentRoomId = null;
+    let chatUnsub = null;
+
+    // WebRTC state
+    const rtcConfig = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] }; // add TURN in prod
+    let pc = null;
+    let localStream = null;
+    let remoteStream = null;
+    let roomRef = null;
+    let callerCandidateCol = null;
+    let calleeCandidateCol = null;
+    let usingFrontCamera = true;
+
+    // ---------- Auth logic ----------
+    signupBtn.addEventListener('click', async () => {
+      const email = authEmail.value.trim();
+      const pw = authPassword.value;
+      if (!email || !pw) return alert('Provide email and password');
+      try {
+        await auth.createUserWithEmailAndPassword(email, pw);
+      } catch (e) { alert(e.message); }
+    });
+
+    loginBtn.addEventListener('click', async () => {
+      const email = authEmail.value.trim();
+      const pw = authPassword.value;
+      if (!email || !pw) return alert('Provide email and password');
+      try {
+        await auth.signInWithEmailAndPassword(email, pw);
+      } catch (e) { alert(e.message); }
+    });
+
+    signOutBtn.addEventListener('click', async () => {
+      try { await auth.signOut(); } catch (e) { console.error(e); }
+    });
+
+    auth.onAuthStateChanged(user => {
+      currentUser = user;
+      if (user) {
+        signedOutUI.classList.add('hidden');
+        signedInUI.classList.remove('hidden');
+        userBadge.textContent = `${user.email}`;
+        statusText.textContent = 'Signed in';
+        enableAppControls(true);
+        // If there's a roomId pre-filled, subscribe to chat for it
+        const rid = (roomIdInput.value || '').trim();
+        if (rid) subscribeToChat(rid);
       } else {
-        signInBtn.style.display="inline";
-        userInfo.style.display="none";
-        userName.textContent="";
-        enableUI(false);
+        signedOutUI.classList.remove('hidden');
+        signedInUI.classList.add('hidden');
+        userBadge.textContent = '';
+        statusText.textContent = 'Not signed in';
+        enableAppControls(false);
+        if (chatUnsub) { chatUnsub(); chatUnsub = null; }
+        messagesEl.innerHTML = '<div class="text-sm text-slate-400">Sign up / login to start chatting and calling.</div>';
       }
     });
-    function enableUI(on){
-      msgInput.disabled=sendBtn.disabled=!on;
-      document.getElementById("createCall").disabled=
-      document.getElementById("answerCall").disabled=
-      document.getElementById("hangup").disabled=!on;
+
+    function enableAppControls(on) {
+      createCallBtn.disabled = !on;
+      answerCallBtn.disabled = !on;
+      hangupBtn.disabled = !on;
+      toggleCamBtn.disabled = !on;
+      messageInput.disabled = !on;
+      sendMsgBtn.disabled = !on;
+      copyRoomBtn.disabled = !on;
+      muteAudioBtn.disabled = !on;
+      swapCamBtn.disabled = !on;
     }
 
-    // Chat
-    function subscribeToChat(id){
-      if(unsub) unsub();
-      messagesEl.innerHTML="";
-      unsub=db.collection("rooms").doc(id).collection("messages")
-        .orderBy("createdAt").onSnapshot(s=>{
-          messagesEl.innerHTML="";
-          s.forEach(doc=>{
-            const m=doc.data();
-            const div=document.createElement("div");
-            div.className="bubble "+(m.senderId===me.uid?"me":"them");
-            div.textContent=m.senderName+": "+m.text;
-            messagesEl.appendChild(div);
+    // ---------- Chat logic ----------
+    function renderMessage(doc) {
+      const data = doc.data();
+      const fromMe = data.senderId === currentUser.uid;
+      const row = document.createElement('div');
+      row.className = `flex ${fromMe ? 'justify-end' : 'justify-start'}`;
+      const bubble = document.createElement('div');
+      bubble.className = `bubble px-3 py-2 rounded-lg ${fromMe ? 'bg-emerald-600 text-slate-900' : 'bg-slate-700 text-slate-100'}`;
+      bubble.innerHTML = `<div class="text-xs text-slate-200 mb-1">${escapeHtml(data.senderName || 'Unknown')}</div>
+                          <div class="text-sm">${escapeHtml(data.text)}</div>
+                          <div class="text-xs text-slate-300 mt-1 text-right">${data.createdAt && data.createdAt.toDate ? data.createdAt.toDate().toLocaleTimeString() : ''}</div>`;
+      row.appendChild(bubble);
+      messagesEl.appendChild(row);
+      messagesEl.scrollTop = messagesEl.scrollHeight;
+    }
+
+    function subscribeToChat(roomId) {
+      if (!currentUser) return;
+      if (chatUnsub) chatUnsub();
+      messagesEl.innerHTML = '';
+      chatUnsub = db.collection('rooms').doc(roomId).collection('messages')
+        .orderBy('createdAt').limit(500)
+        .onSnapshot(snap => {
+          messagesEl.innerHTML = '';
+          snap.forEach(renderMessage);
+        }, err => {
+          console.error('Chat snapshot error', err);
+        });
+      currentRoomId = roomId;
+    }
+
+    async function ensureRoomExists() {
+      let rid = (roomIdInput.value || '').trim();
+      if (!rid) {
+        const ref = await db.collection('rooms').add({ createdAt: firebase.firestore.FieldValue.serverTimestamp(), owner: currentUser.uid });
+        rid = ref.id;
+        roomIdInput.value = rid;
+      }
+      if (currentRoomId !== rid) subscribeToChat(rid);
+      return rid;
+    }
+
+    sendMsgBtn.addEventListener('click', async () => {
+      const text = (messageInput.value || '').trim();
+      if (!text) return;
+      if (!currentUser) return alert('Sign in first');
+      try {
+        const rid = await ensureRoomExists();
+        await db.collection('rooms').doc(rid).collection('messages').add({
+          text,
+          senderId: currentUser.uid,
+          senderName: currentUser.email || currentUser.uid,
+          createdAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+        messageInput.value = '';
+      } catch (e) {
+        console.error(e); alert('Send failed: ' + e.message);
+      }
+    });
+
+    messageInput.addEventListener('keydown', e => {
+      if (e.key === 'Enter') sendMsgBtn.click();
+    });
+
+    copyRoomBtn.addEventListener('click', async () => {
+      try {
+        const rid = await ensureRoomExists();
+        await navigator.clipboard.writeText(rid);
+        alert('Room ID copied: ' + rid);
+      } catch (e) { console.error(e); }
+    });
+
+    // ---------- WebRTC (calls) ----------
+    async function openLocalMedia(frontCamera = true) {
+      if (localStream) return localStream;
+      const constraints = { audio: true, video: { facingMode: frontCamera ? 'user' : 'environment' } };
+      localStream = await navigator.mediaDevices.getUserMedia(constraints);
+      localVideo.srcObject = localStream;
+      remoteStream = new MediaStream();
+      remoteVideo.srcObject = remoteStream;
+      muteAudioBtn.disabled = false;
+      swapCamBtn.disabled = false;
+      return localStream;
+    }
+
+    function createPeerConnection() {
+      pc = new RTCPeerConnection(rtcConfig);
+      localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
+      pc.ontrack = (e) => {
+        e.streams[0].getTracks().forEach(t => remoteStream.addTrack(t));
+      };
+      pc.onicecandidate = async (event) => {
+        if (!event.candidate) return;
+        const colName = pc.localDescription && pc.localDescription.type === 'offer' ? 'callerCandidates' : 'calleeCandidates';
+        if (!roomRef) return;
+        await roomRef.collection(colName).add(event.candidate.toJSON());
+      };
+      pc.onconnectionstatechange = () => {
+        console.log('PC state:', pc.connectionState);
+        statusText.textContent = 'Peer connection: ' + pc.connectionState;
+      };
+    }
+
+    createCallBtn.addEventListener('click', async () => {
+      if (!currentUser) return alert('Sign in first');
+      try {
+        await openLocalMedia(usingFrontCamera);
+        const rid = await ensureRoomExists();
+        roomRef = db.collection('rooms').doc(rid);
+        createPeerConnection();
+
+        const offer = await pc.createOffer();
+        await pc.setLocalDescription(offer);
+
+        // store offer
+        await roomRef.set({ offer: pc.localDescription.toJSON(), owner: currentUser.uid }, { merge: true });
+
+        // listen for answer
+        roomRef.onSnapshot(async snap => {
+          const data = snap.data();
+          if (!pc.currentRemoteDescription && data && data.answer) {
+            console.log('Got answer');
+            await pc.setRemoteDescription(new RTCSessionDescription(data.answer));
+          }
+        });
+
+        // Listen for callee candidates
+        calleeCandidateCol = roomRef.collection('calleeCandidates');
+        calleeCandidateCol.onSnapshot(snapshot => {
+          snapshot.docChanges().forEach(change => {
+            if (change.type === 'added') {
+              const data = change.doc.data();
+              pc.addIceCandidate(new RTCIceCandidate(data));
+            }
           });
         });
-    }
-    async function ensureRoom(){
-      let id=roomInput.value.trim();
-      if(!id){
-        const ref=await db.collection("rooms").add({createdAt:firebase.firestore.FieldValue.serverTimestamp()});
-        id=ref.id; roomInput.value=id;
+
+        callerCandidateCol = roomRef.collection('callerCandidates'); // for cleanup
+        alert('Call created. Share Room ID: ' + rid);
+        hangupBtn.disabled = false;
+      } catch (e) {
+        console.error(e); alert('Create call failed: ' + e.message);
       }
-      if(currentRoomId!==id){currentRoomId=id;subscribeToChat(id);}
-      return id;
-    }
-    sendBtn.onclick=async ()=>{
-      const text=msgInput.value.trim(); if(!text) return;
-      const room=await ensureRoom();
-      db.collection("rooms").doc(room).collection("messages").add({
-        text, senderId:me.uid, senderName:me.displayName||me.email,
-        createdAt:firebase.firestore.FieldValue.serverTimestamp()
-      });
-      msgInput.value="";
-    };
-    document.getElementById("copyRoom").onclick=async()=>{
-      const id=await ensureRoom(); navigator.clipboard.writeText(id); alert("Copied Room ID: "+id);
-    };
+    });
 
-    // WebRTC (Calls)
-    const servers={iceServers:[{urls:["stun:stun.l.google.com:19302"]}]};
-    let pc, localStream, remoteStream, roomRef;
+    answerCallBtn.addEventListener('click', async () => {
+      if (!currentUser) return alert('Sign in first');
+      const id = (document.getElementById('roomIdInput').value || '').trim();
+      if (!id) return alert('Enter Room ID to answer');
+      try {
+        await openLocalMedia(usingFrontCamera);
+        roomRef = db.collection('rooms').doc(id);
+        const snap = await roomRef.get();
+        if (!snap.exists) return alert('Room not found');
 
-    async function openMedia(){
-      if(localStream) return;
-      localStream=await navigator.mediaDevices.getUserMedia({video:true,audio:true});
-      document.getElementById("localVideo").srcObject=localStream;
-      remoteStream=new MediaStream();
-      document.getElementById("remoteVideo").srcObject=remoteStream;
+        createPeerConnection();
+
+        const offer = snap.data().offer;
+        if (!offer) return alert('No offer in room');
+
+        await pc.setRemoteDescription(new RTCSessionDescription(offer));
+
+        const answer = await pc.createAnswer();
+        await pc.setLocalDescription(answer);
+
+        await roomRef.update({ answer: pc.localDescription.toJSON() });
+
+        // listen for caller candidates
+        callerCandidateCol = roomRef.collection('callerCandidates');
+        callerCandidateCol.onSnapshot(snapshot => {
+          snapshot.docChanges().forEach(change => {
+            if (change.type === 'added') {
+              pc.addIceCandidate(new RTCIceCandidate(change.doc.data()));
+            }
+          });
+        });
+
+        // listen for callee candidates
+        calleeCandidateCol = roomRef.collection('calleeCandidates');
+        calleeCandidateCol.onSnapshot(snapshot => {
+          snapshot.docChanges().forEach(change => {
+            if (change.type === 'added') {
+              pc.addIceCandidate(new RTCIceCandidate(change.doc.data()));
+            }
+          });
+        });
+
+        // also start chat subscription to same room
+        roomIdInput.value = id;
+        ensureRoomExists();
+        alert('Answered call — connected to room ' + id);
+        hangupBtn.disabled = false;
+      } catch (e) {
+        console.error(e); alert('Answer failed: ' + e.message);
+      }
+    });
+
+    hangupBtn.addEventListener('click', async () => {
+      if (pc) {
+        pc.getSenders().forEach(s => s.track && s.track.stop());
+        pc.close();
+      }
+      pc = null;
+      if (localStream) localStream.getTracks().forEach(t => t.stop());
+      localStream = null;
+      if (remoteStream) remoteStream.getTracks().forEach(t => t.stop());
+      remoteStream = null;
+      localVideo.srcObject = null;
+      remoteVideo.srcObject = null;
+
+      // Optionally clean up Firestore signaling data
+      if (roomRef) {
+        try {
+          const caller = await roomRef.collection('callerCandidates').get();
+          caller.forEach(d => d.ref.delete());
+          const callee = await roomRef.collection('calleeCandidates').get();
+          callee.forEach(d => d.ref.delete());
+          // keep messages probably, but you can delete roomRef.delete() if desired (careful)
+        } catch (e) { console.warn('Cleanup error', e); }
+      }
+      roomRef = null;
+      hangupBtn.disabled = true;
+    });
+
+    toggleCamBtn.addEventListener('click', async () => {
+      usingFrontCamera = !usingFrontCamera;
+      if (localStream) {
+        // stop then reopen
+        localStream.getTracks().forEach(t => t.stop());
+        localStream = null;
+        await openLocalMedia(usingFrontCamera);
+        if (pc) {
+          // replace video track
+          const videoTrack = localStream.getVideoTracks()[0];
+          const sender = pc.getSenders().find(s => s.track && s.track.kind === 'video');
+          if (sender) sender.replaceTrack(videoTrack);
+        }
+      }
+    });
+
+    muteAudioBtn.addEventListener('click', () => {
+      if (!localStream) return;
+      const audioTracks = localStream.getAudioTracks();
+      if (!audioTracks.length) return;
+      audioTracks.forEach(t => (t.enabled = !t.enabled));
+      muteAudioBtn.textContent = audioTracks[0].enabled ? 'Mute Mic' : 'Unmute Mic';
+    });
+
+    swapCamBtn.addEventListener('click', async () => {
+      usingFrontCamera = !usingFrontCamera;
+      if (localStream) {
+        localStream.getTracks().forEach(t => t.stop());
+        localStream = null;
+        await openLocalMedia(usingFrontCamera);
+        if (pc) {
+          const videoTrack = localStream.getVideoTracks()[0];
+          const sender = pc.getSenders().find(s => s.track && s.track.kind === 'video');
+          if (sender) sender.replaceTrack(videoTrack);
+        }
+      }
+    });
+
+    // Utility function to escape HTML in chat text
+    function escapeHtml(str = '') {
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
     }
-    function createPeer(){
-      pc=new RTCPeerConnection(servers);
-      localStream.getTracks().forEach(t=>pc.addTrack(t,localStream));
-      pc.ontrack=e=>e.streams[0].getTracks().forEach(t=>remoteStream.addTrack(t));
-      pc.onicecandidate=e=>{if(e.candidate) roomRef.collection(pc.localDescription.type==='offer'?'callerCandidates':'calleeCandidates').add(e.candidate.toJSON());};
-    }
-    async function createCall(){
-      await openMedia(); const id=await ensureRoom(); roomRef=db.collection("rooms").doc(id);
-      createPeer();
-      const offer=await pc.createOffer(); await pc.setLocalDescription(offer);
-      await roomRef.set({offer});
-      roomRef.onSnapshot(async snap=>{const d=snap.data(); if(d.answer && !pc.currentRemoteDescription){await pc.setRemoteDescription(new RTCSessionDescription(d.answer));}});
-      roomRef.collection("calleeCandidates").onSnapshot(s=>s.docChanges().forEach(c=>pc.addIceCandidate(new RTCIceCandidate(c.doc.data()))));
-      alert("Call created. Share Room ID: "+id);
-    }
-    async function answerCall(){
-      await openMedia(); const id=document.getElementById("answerRoomId").value.trim()||roomInput.value; roomRef=db.collection("rooms").doc(id);
-      const snap=await roomRef.get(); if(!snap.exists) return alert("Room not found");
-      createPeer();
-      await pc.setRemoteDescription(new RTCSessionDescription(snap.data().offer));
-      const answer=await pc.createAnswer(); await pc.setLocalDescription(answer);
-      await roomRef.update({answer});
-      roomRef.collection("callerCandidates").onSnapshot(s=>s.docChanges().forEach(c=>pc.addIceCandidate(new RTCIceCandidate(c.doc.data()))));
-      roomInput.value=id; ensureRoom();
-    }
-    async function hangup(){
-      if(pc) pc.close(); pc=null; localStream=null; remoteStream=null;
-      document.getElementById("localVideo").srcObject=null;
-      document.getElementById("remoteVideo").srcObject=null;
-    }
-    document.getElementById("createCall").onclick=createCall;
-    document.getElementById("answerCall").onclick=answerCall;
-    document.getElementById("hangup").onclick=hangup;
+
+    // ---------- Small UX helpers ----------
+    document.addEventListener('visibilitychange', () => {
+      // could be used to signal presence in Firestore (not implemented here)
+    });
+
+    // Initialize UI disabled until auth ready
+    enableAppControls(false);
+
+    // Clean error console during tests
+    window.addEventListener('unhandledrejection', e => { console.error('Unhandled promise rejection:', e.reason); });
   </script>
 </body>
 </html>
