@@ -1,0 +1,147 @@
+<!-- index.html -->
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Chat + Video Call App</title>
+  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-firestore-compat.js"></script>
+</head>
+<body>
+  <h2>Login with Gmail</h2>
+  <button onclick="login()">Login with Google</button>
+  <div id="user-info" style="display:none;">
+    <p id="welcome"></p>
+    <input id="friend-email" placeholder="Friend's Gmail">
+    <button onclick="sendFriendRequest()">Send Friend Request</button>
+    <div id="friend-requests"></div>
+    <button onclick="startCall()">Start Call</button>
+    <button onclick="endCall()">End Call</button>
+    <video id="localVideo" autoplay muted></video>
+    <video id="remoteVideo" autoplay></video>
+    <input id="messageInput" placeholder="Type a message">
+    <button onclick="sendMessage()">Send</button>
+    <div id="chatBox"></div>
+  </div>
+
+  <script>
+    // Firebase config
+    // Your web app's Firebase configuration
+const firebaseConfig = {
+  apiKey: "AIzaSyAbDUvGSBhVj-YIDVF4Bod2eYNx2uaox_Q",
+  authDomain: "helpsomeones-4a08a.firebaseapp.com",
+  databaseURL: "https://helpsomeones-4a08a-default-rtdb.firebaseio.com",
+  projectId: "helpsomeones-4a08a",
+  storageBucket: "helpsomeones-4a08a.firebasestorage.app",
+  messagingSenderId: "871091320832",
+  appId: "1:871091320832:web:918e4e2f9697788010c0e5"
+};
+    firebase.initializeApp(firebaseConfig);
+    const auth = firebase.auth();
+    const db = firebase.firestore();
+
+    let currentUser;
+    let peerConnection;
+    const servers = { iceServers: [{ urls: "stun:stun.l.google.com:19302" }] };
+
+    function login() {
+      const provider = new firebase.auth.GoogleAuthProvider();
+      auth.signInWithPopup(provider).then(result => {
+        currentUser = result.user;
+        document.getElementById("user-info").style.display = "block";
+        document.getElementById("welcome").innerText = "Hello, " + currentUser.displayName;
+        listenFriendRequests();
+        listenMessages();
+      });
+    }
+
+    function sendFriendRequest() {
+      const friendEmail = document.getElementById("friend-email").value;
+      db.collection("friendRequests").add({
+        from: currentUser.email,
+        to: friendEmail,
+        accepted: false
+      });
+      alert("Request sent to " + friendEmail);
+    }
+
+    function listenFriendRequests() {
+      db.collection("friendRequests")
+        .where("to", "==", currentUser.email)
+        .where("accepted", "==", false)
+        .onSnapshot(snapshot => {
+          const div = document.getElementById("friend-requests");
+          div.innerHTML = "";
+          snapshot.forEach(doc => {
+            const data = doc.data();
+            const btn = document.createElement("button");
+            btn.innerText = `Accept request from ${data.from}`;
+            btn.onclick = () => {
+              db.collection("friendRequests").doc(doc.id).update({ accepted: true });
+            };
+            div.appendChild(btn);
+          });
+        });
+    }
+
+    // 🔴 Real-Time Chat
+    function sendMessage() {
+      const text = document.getElementById("messageInput").value;
+      db.collection("messages").add({
+        from: currentUser.email,
+        text,
+        timestamp: firebase.firestore.FieldValue.serverTimestamp()
+      });
+      document.getElementById("messageInput").value = "";
+    }
+
+    function listenMessages() {
+      db.collection("messages")
+        .orderBy("timestamp")
+        .onSnapshot(snapshot => {
+          const chatBox = document.getElementById("chatBox");
+          chatBox.innerHTML = "";
+          snapshot.forEach(doc => {
+            const msg = doc.data();
+            const p = document.createElement("p");
+            p.textContent = `${msg.from}: ${msg.text}`;
+            chatBox.appendChild(p);
+          });
+        });
+    }
+
+    // 🎥 WebRTC Video Calling (Prototype)
+    async function startCall() {
+      peerConnection = new RTCPeerConnection(servers);
+      const localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+      document.getElementById("localVideo").srcObject = localStream;
+      localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
+
+      peerConnection.ontrack = (event) => {
+        document.getElementById("remoteVideo").srcObject = event.streams[0];
+      };
+
+      const offer = await peerConnection.createOffer();
+      await peerConnection.setLocalDescription(offer);
+
+      // Store offer in Firestore (in production, use signaling server)
+      const callDoc = db.collection("calls").doc(currentUser.email);
+      await callDoc.set({ offer });
+
+      callDoc.onSnapshot(async (doc) => {
+        const data = doc.data();
+        if (data.answer && !peerConnection.currentRemoteDescription) {
+          await peerConnection.setRemoteDescription(new RTCSessionDescription(data.answer));
+        }
+      });
+    }
+
+    async function endCall() {
+      peerConnection?.close();
+      peerConnection = null;
+      document.getElementById("localVideo").srcObject?.getTracks().forEach(t => t.stop());
+      document.getElementById("remoteVideo").srcObject = null;
+    }
+  </script>
+</body>
+</html>
