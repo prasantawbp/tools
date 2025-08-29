@@ -140,15 +140,24 @@
      **********************/
     // TODO: Paste your Firebase config here (Project settings → General → Your apps)
     // --- BEGIN CONFIG ---
-   const firebaseConfig = {
+ // Import the functions you need from the SDKs you need
+import { initializeApp } from "firebase/app";
+// TODO: Add SDKs for Firebase products that you want to use
+// https://firebase.google.com/docs/web/setup#available-libraries
+
+// Your web app's Firebase configuration
+const firebaseConfig = {
   apiKey: "AIzaSyAbDUvGSBhVj-YIDVF4Bod2eYNx2uaox_Q",
   authDomain: "helpsomeones-4a08a.firebaseapp.com",
   databaseURL: "https://helpsomeones-4a08a-default-rtdb.firebaseio.com",
   projectId: "helpsomeones-4a08a",
   storageBucket: "helpsomeones-4a08a.firebasestorage.app",
   messagingSenderId: "871091320832",
-  appId: "1:871091320832:web:918e4e2f9697788010c0e5"
+  appId: "1:871091320832:web:5c6dc80122746d3610c0e5"
 };
+
+// Initialize Firebase
+const app = initializeApp(firebaseConfig);
     // --- END CONFIG ---
 
     // SDK imports (Firebase v10+ modular CDN)
