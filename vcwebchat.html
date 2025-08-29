@@ -1,33 +1,146 @@
-<!-- index.html -->
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-  <title>Chat + Video Call App</title>
-  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-auth-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-firestore-compat.js"></script>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>One-Page Chat + Voice/Video (Firebase + WebRTC)</title>
+  <style>
+    :root{--bg:#0f172a;--panel:#111827;--muted:#94a3b8;--accent:#22c55e;--danger:#ef4444;--card:#0b1220;--line:#1f2937}
+    *{box-sizing:border-box} body{margin:0;background:linear-gradient(180deg,#0b1220,#0f172a);color:#e5e7eb;font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Helvetica,Arial}
+    a{color:#93c5fd}
+    .wrap{max-width:1200px;margin:0 auto;padding:16px}
+    .grid{display:grid;gap:16px}
+    .cols{grid-template-columns:280px 1fr}
+    .card{background:var(--panel);border:1px solid var(--line);border-radius:18px;box-shadow:0 10px 30px rgba(0,0,0,.35)}
+    .pad{padding:14px}
+    h1{margin:6px 0 10px;font-size:20px}
+    h2{margin:0 0 8px;font-size:14px;text-transform:uppercase;color:var(--muted);letter-spacing:.08em}
+    input,button,select,textarea{font:inherit}
+    input,textarea,select{width:100%;padding:10px 12px;border-radius:12px;border:1px solid var(--line);background:#0b1020;color:#e5e7eb;outline:none}
+    input::placeholder,textarea::placeholder{color:#6b7280}
+    button{border:0;border-radius:12px;padding:10px 12px;cursor:pointer}
+    .btn{background:#1f2937;color:#e5e7eb;border:1px solid #334155}
+    .btn:hover{filter:brightness(1.1)}
+    .primary{background:var(--accent);color:#052e18}
+    .danger{background:var(--danger);color:#fff}
+    .row{display:flex;gap:8px;align-items:center}
+    .stack{display:flex;flex-direction:column;gap:10px}
+    .muted{color:var(--muted)}
+    .list{display:flex;flex-direction:column;gap:6px;max-height:260px;overflow:auto}
+    .item{display:flex;align-items:center;justify-content:space-between;padding:8px 10px;border:1px solid var(--line);background:var(--card);border-radius:12px}
+    .item .meta{display:flex;gap:8px;align-items:center}
+    .status{font-size:12px;color:var(--muted)}
+    .chat{display:flex;flex-direction:column;height:72vh}
+    .messages{flex:1;overflow:auto;padding:10px;display:flex;flex-direction:column;gap:10px}
+    .bubble{max-width:70%;padding:10px 12px;border-radius:14px;border:1px solid var(--line)}
+    .me{align-self:flex-end;background:#0ea5e9;color:#062030;border-color:#0369a1}
+    .them{align-self:flex-start;background:#111827}
+    .composer{display:flex;gap:8px;padding:10px;border-top:1px solid var(--line)}
+    .video-area{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+    video{width:100%;background:#000;border-radius:12px;border:1px solid var(--line)}
+    .badge{padding:2px 8px;border-radius:999px;background:#0b1220;border:1px solid var(--line);font-size:12px}
+    .hidden{display:none !important}
+    .sep{height:1px;background:var(--line);margin:8px 0}
+    .small{font-size:12px}
+    .center{display:flex;align-items:center;justify-content:center}
+  </style>
 </head>
 <body>
-  <h2>Login with Gmail</h2>
-  <button onclick="login()">Login with Google</button>
-  <div id="user-info" style="display:none;">
-    <p id="welcome"></p>
-    <input id="friend-email" placeholder="Friend's Gmail">
-    <button onclick="sendFriendRequest()">Send Friend Request</button>
-    <div id="friend-requests"></div>
-    <button onclick="startCall()">Start Call</button>
-    <button onclick="endCall()">End Call</button>
-    <video id="localVideo" autoplay muted></video>
-    <video id="remoteVideo" autoplay></video>
-    <input id="messageInput" placeholder="Type a message">
-    <button onclick="sendMessage()">Send</button>
-    <div id="chatBox"></div>
+  <div class="wrap grid cols">
+    <!-- LEFT: Auth + People + Requests -->
+    <aside class="card pad stack">
+      <h1>🔐 Auth</h1>
+      <div id="auth-forms" class="stack">
+        <div id="signup" class="stack">
+          <h2>Create account</h2>
+          <input id="su-email" placeholder="Email" type="email" />
+          <input id="su-pass" placeholder="Password (min 6)" type="password" />
+          <input id="su-username" placeholder="Username (unique, a–z, 0–9, _ )" />
+          <button id="btn-signup" class="primary">Sign Up</button>
+        </div>
+        <div class="sep"></div>
+        <div id="signin" class="stack">
+          <h2>Sign in</h2>
+          <input id="si-email" placeholder="Email" type="email" />
+          <input id="si-pass" placeholder="Password" type="password" />
+          <button id="btn-signin" class="btn">Sign In</button>
+        </div>
+      </div>
+      <div id="authed" class="stack hidden">
+        <div class="row" style="justify-content:space-between">
+          <div class="stack" style="gap:2px">
+            <div>Signed in as <b id="me-name">—</b></div>
+            <div class="small muted" id="me-email">—</div>
+          </div>
+          <button id="btn-signout" class="btn">Sign out</button>
+        </div>
+        <div class="sep"></div>
+        <h2>Find friends</h2>
+        <div class="row">
+          <input id="friend-username" placeholder="Friend's username" />
+          <button id="btn-send-request" class="btn">Send Request</button>
+        </div>
+        <div class="row small muted">
+          Tip: share your username with your friend. Usernames are unique.
+        </div>
+        <div class="sep"></div>
+        <h2>Incoming requests</h2>
+        <div id="incoming" class="list"></div>
+        <h2>Friends</h2>
+        <div id="friends" class="list"></div>
+      </div>
+      <div class="sep"></div>
+      <div class="small muted">
+        ⚙️ First time? In the code, paste your Firebase config, enable <b>Email/Password</b> auth and <b>Cloud Firestore</b>.
+      </div>
+    </aside>
+
+    <!-- RIGHT: Chat + Calls -->
+    <main class="card pad">
+      <div class="row" style="justify-content:space-between;align-items:center">
+        <h1>💬 Chat & 📹 Calls</h1>
+        <div class="badge" id="call-status">Idle</div>
+      </div>
+      <div id="chat-empty" class="center muted" style="height:72vh">Pick a friend to start chatting.</div>
+      <section id="chat-area" class="chat hidden">
+        <div class="row" style="justify-content:space-between;align-items:center;margin-bottom:8px">
+          <div>
+            <div class="small muted">Chatting with</div>
+            <div style="font-weight:700" id="peer-name">—</div>
+          </div>
+          <div class="row">
+            <button id="btn-start-call" class="primary">Start Call</button>
+            <button id="btn-end-call" class="danger" disabled>End Call</button>
+          </div>
+        </div>
+        <div class="video-area" style="margin-bottom:10px">
+          <div>
+            <div class="small muted">Your camera</div>
+            <video id="localVideo" autoplay playsinline muted></video>
+          </div>
+          <div>
+            <div class="small muted">Friend</div>
+            <video id="remoteVideo" autoplay playsinline></video>
+          </div>
+        </div>
+        <div class="card" style="border-radius:14px;overflow:hidden">
+          <div id="messages" class="messages"></div>
+          <div class="composer">
+            <input id="msg" placeholder="Type a message and hit Send…" />
+            <button id="btn-send" class="primary">Send</button>
+          </div>
+        </div>
+      </section>
+    </main>
   </div>
 
-  <script>
-    // Firebase config
-    // Your web app's Firebase configuration
-const firebaseConfig = {
+  <script type="module">
+    /**********************
+     * 1) Firebase Setup  *
+     **********************/
+    // TODO: Paste your Firebase config here (Project settings → General → Your apps)
+    // --- BEGIN CONFIG ---
+   const firebaseConfig = {
   apiKey: "AIzaSyAbDUvGSBhVj-YIDVF4Bod2eYNx2uaox_Q",
   authDomain: "helpsomeones-4a08a.firebaseapp.com",
   databaseURL: "https://helpsomeones-4a08a-default-rtdb.firebaseio.com",
@@ -36,112 +149,463 @@ const firebaseConfig = {
   messagingSenderId: "871091320832",
   appId: "1:871091320832:web:918e4e2f9697788010c0e5"
 };
-    firebase.initializeApp(firebaseConfig);
-    const auth = firebase.auth();
-    const db = firebase.firestore();
+    // --- END CONFIG ---
 
-    let currentUser;
-    let peerConnection;
-    const servers = { iceServers: [{ urls: "stun:stun.l.google.com:19302" }] };
+    // SDK imports (Firebase v10+ modular CDN)
+    import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js';
+    import { getAuth, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, updateProfile } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js';
+    import { getFirestore, doc, getDoc, setDoc, updateDoc, collection, addDoc, onSnapshot, query, where, serverTimestamp, orderBy, deleteDoc } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
 
-    function login() {
-      const provider = new firebase.auth.GoogleAuthProvider();
-      auth.signInWithPopup(provider).then(result => {
-        currentUser = result.user;
-        document.getElementById("user-info").style.display = "block";
-        document.getElementById("welcome").innerText = "Hello, " + currentUser.displayName;
-        listenFriendRequests();
-        listenMessages();
-      });
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+    const db = getFirestore(app);
+
+    /***********************************
+     * 2) DOM helpers & global state   *
+     ***********************************/
+    const $ = (sel) => document.querySelector(sel);
+    const meName = $('#me-name');
+    const meEmail = $('#me-email');
+
+    const authForms = $('#auth-forms');
+    const authed = $('#authed');
+    const incomingEl = $('#incoming');
+    const friendsEl = $('#friends');
+
+    const chatEmpty = $('#chat-empty');
+    const chatArea = $('#chat-area');
+    const peerNameEl = $('#peer-name');
+    const messagesEl = $('#messages');
+    const msgInput = $('#msg');
+
+    const callStatus = $('#call-status');
+    const btnStartCall = $('#btn-start-call');
+    const btnEndCall = $('#btn-end-call');
+    const localVideo = $('#localVideo');
+    const remoteVideo = $('#remoteVideo');
+
+    let currentUser = null;
+    let currentFriend = null; // {uid, username}
+    let unsubscribeMessages = null;
+    let pc = null; // RTCPeerConnection
+    let localStream = null;
+    let remoteStream = null;
+    let callDocUnsub = null;
+
+    /*************************
+     * 3) Firestore schemas  *
+     *************************
+     users/{uid} => { email, username, createdAt }
+     usernames/{username} => { uid }  // uniqueness map
+     users/{uid}/requests/{requestId} => { fromUid, fromUsername, status: 'pending' }
+     users/{uid}/friends/{friendUid} => { username, since }
+
+     conversations/{convId} => { members: [uidA, uidB] }
+     conversations/{convId}/messages/{msgId} => { from, text, ts }
+
+     calls/{convId} => { offer, answer }
+     calls/{convId}/offerCandidates/{doc}
+     calls/{convId}/answerCandidates/{doc}
+    ***********************************/
+
+    const usernamePattern = /^[a-z0-9_]{3,20}$/;
+
+    function convIdFor(uida, uidb){
+      return [uida, uidb].sort().join('_');
     }
 
-    function sendFriendRequest() {
-      const friendEmail = document.getElementById("friend-email").value;
-      db.collection("friendRequests").add({
-        from: currentUser.email,
-        to: friendEmail,
-        accepted: false
-      });
-      alert("Request sent to " + friendEmail);
+    function el(tag, cls, children){
+      const e = document.createElement(tag);
+      if(cls) e.className = cls;
+      if(children) children.forEach(c => e.append(c));
+      return e;
     }
 
-    function listenFriendRequests() {
-      db.collection("friendRequests")
-        .where("to", "==", currentUser.email)
-        .where("accepted", "==", false)
-        .onSnapshot(snapshot => {
-          const div = document.getElementById("friend-requests");
-          div.innerHTML = "";
-          snapshot.forEach(doc => {
-            const data = doc.data();
-            const btn = document.createElement("button");
-            btn.innerText = `Accept request from ${data.from}`;
-            btn.onclick = () => {
-              db.collection("friendRequests").doc(doc.id).update({ accepted: true });
-            };
-            div.appendChild(btn);
-          });
+    function toast(text){
+      console.log(text);
+    }
+
+    /********************
+     * 4) Auth handlers *
+     ********************/
+    $('#btn-signup').addEventListener('click', async () => {
+      const email = $('#su-email').value.trim();
+      const pass = $('#su-pass').value;
+      const username = $('#su-username').value.trim().toLowerCase();
+      if(!usernamePattern.test(username)) return alert('Username must be 3–20 chars: a–z, 0–9, _');
+      try{
+        // Reserve username
+        const unameRef = doc(db, 'usernames', username);
+        const unameSnap = await getDoc(unameRef);
+        if(unameSnap.exists()) return alert('That username is taken.');
+
+        const cred = await createUserWithEmailAndPassword(auth, email, pass);
+        await updateProfile(cred.user, { displayName: username });
+        await setDoc(doc(db, 'users', cred.user.uid), {
+          email,
+          username,
+          createdAt: serverTimestamp()
         });
+        await setDoc(unameRef, { uid: cred.user.uid });
+        toast('Account created.');
+      }catch(e){
+        console.error(e); alert(e.message);
+      }
+    });
+
+    $('#btn-signin').addEventListener('click', async () => {
+      const email = $('#si-email').value.trim();
+      const pass = $('#si-pass').value;
+      try{
+        await signInWithEmailAndPassword(auth, email, pass);
+      }catch(e){console.error(e); alert(e.message);} 
+    });
+
+    $('#btn-signout').addEventListener('click', async () => {
+      try{
+        // cleanup username listener etc
+        await signOut(auth);
+      }catch(e){console.error(e)}
+    });
+
+    onAuthStateChanged(auth, async (user) => {
+      currentUser = user;
+      if(user){
+        authForms.classList.add('hidden');
+        authed.classList.remove('hidden');
+        meName.textContent = user.displayName || '—';
+        meEmail.textContent = user.email || '';
+        watchIncomingRequests();
+        watchFriends();
+      }else{
+        authed.classList.add('hidden');
+        authForms.classList.remove('hidden');
+        chatArea.classList.add('hidden');
+        chatEmpty.classList.remove('hidden');
+        messagesEl.innerHTML = '';
+        currentFriend = null;
+        if(unsubscribeMessages){ unsubscribeMessages(); unsubscribeMessages = null; }
+        stopCall();
+      }
+    });
+
+    /******************************
+     * 5) Friend request workflow *
+     ******************************/
+    $('#btn-send-request').addEventListener('click', async () => {
+      const target = $('#friend-username').value.trim().toLowerCase();
+      if(!currentUser) return alert('Sign in first');
+      if(!usernamePattern.test(target)) return alert('Invalid username');
+      if(target === (currentUser.displayName||'')) return alert("That's you!");
+      // Lookup
+      const unameRef = doc(db, 'usernames', target);
+      const unameSnap = await getDoc(unameRef);
+      if(!unameSnap.exists()) return alert('User not found');
+      const toUid = unameSnap.data().uid;
+
+      const reqRef = await addDoc(collection(db, 'users', toUid, 'requests'), {
+        fromUid: currentUser.uid,
+        fromUsername: currentUser.displayName || 'unknown',
+        status: 'pending',
+        createdAt: serverTimestamp()
+      });
+      toast('Request sent.');
+      $('#friend-username').value = '';
+    });
+
+    function watchIncomingRequests(){
+      if(!currentUser) return;
+      const q = query(collection(db, 'users', currentUser.uid, 'requests'));
+      onSnapshot(q, (snap) => {
+        incomingEl.innerHTML = '';
+        snap.forEach(docu => {
+          const r = docu.data();
+          const row = el('div','item',[
+            el('div','meta',[ el('div','', [document.createTextNode(r.fromUsername)]) , el('div','status',[document.createTextNode(r.status)]) ]),
+          ]);
+          if(r.status === 'pending'){
+            const actions = el('div','row',[]);
+            const acceptBtn = el('button','btn',[document.createTextNode('Accept')]);
+            const rejectBtn = el('button','btn',[document.createTextNode('Reject')]);
+            acceptBtn.addEventListener('click', async () => acceptRequest(docu.id, r));
+            rejectBtn.addEventListener('click', async () => deleteDoc(doc(db, 'users', currentUser.uid, 'requests', docu.id)));
+            actions.append(acceptBtn, rejectBtn);
+            row.append(actions);
+          }
+          incomingEl.append(row);
+        });
+      });
     }
 
-    // 🔴 Real-Time Chat
-    function sendMessage() {
-      const text = document.getElementById("messageInput").value;
-      db.collection("messages").add({
-        from: currentUser.email,
+    async function acceptRequest(reqId, r){
+      if(!currentUser) return;
+      const myUid = currentUser.uid;
+      const theirUid = r.fromUid;
+      // fetch their username from usernames map or users collection
+      let theirUsername = r.fromUsername;
+      if(!theirUsername){
+        const theirUser = await getDoc(doc(db,'users',theirUid));
+        theirUsername = theirUser.exists()? theirUser.data().username : 'friend';
+      }
+      // add mutual friendship
+      await setDoc(doc(db,'users',myUid,'friends',theirUid), { username: theirUsername, since: serverTimestamp() });
+      const myUserSnap = await getDoc(doc(db,'users',myUid));
+      const myUsername = myUserSnap.exists()? myUserSnap.data().username : 'me';
+      await setDoc(doc(db,'users',theirUid,'friends',myUid), { username: myUsername, since: serverTimestamp() });
+      // delete request
+      await deleteDoc(doc(db,'users',myUid,'requests',reqId));
+      toast('Friend added.');
+    }
+
+    function watchFriends(){
+      if(!currentUser) return;
+      const q = query(collection(db, 'users', currentUser.uid, 'friends'));
+      onSnapshot(q, (snap) => {
+        friendsEl.innerHTML='';
+        snap.forEach(d => {
+          const friendUid = d.id; const data = d.data();
+          const row = el('div','item',[
+            el('div','meta',[ el('div','', [document.createTextNode(data.username)]) ]),
+            el('div','row',[])
+          ]);
+          const openBtn = el('button','btn',[document.createTextNode('Open Chat')]);
+          openBtn.addEventListener('click', () => openChat({ uid: friendUid, username: data.username }));
+          row.lastChild.append(openBtn);
+          friendsEl.append(row);
+        });
+      });
+    }
+
+    /*****************
+     * 6) Messaging  *
+     *****************/
+    async function openChat(friend){
+      currentFriend = friend;
+      peerNameEl.textContent = friend.username;
+      chatEmpty.classList.add('hidden');
+      chatArea.classList.remove('hidden');
+
+      if(unsubscribeMessages){ unsubscribeMessages(); unsubscribeMessages = null; }
+      const cid = convIdFor(currentUser.uid, friend.uid);
+      const convRef = doc(db,'conversations',cid);
+      const convSnap = await getDoc(convRef);
+      if(!convSnap.exists()){
+        await setDoc(convRef, { members: [currentUser.uid, friend.uid] });
+      }
+      const msgsRef = collection(db,'conversations',cid,'messages');
+      const q = query(msgsRef, orderBy('ts','asc'));
+      unsubscribeMessages = onSnapshot(q, (snap) => {
+        messagesEl.innerHTML='';
+        snap.forEach(m => {
+          const { from, text } = m.data();
+          const mine = from === currentUser.uid;
+          const b = el('div', 'bubble ' + (mine? 'me':'them'), [document.createTextNode(text)]);
+          messagesEl.append(b);
+          messagesEl.scrollTop = messagesEl.scrollHeight;
+        });
+      });
+    }
+
+    $('#btn-send').addEventListener('click', sendMessage);
+    msgInput.addEventListener('keydown', (e)=>{
+      if(e.key==='Enter') sendMessage();
+    });
+
+    async function sendMessage(){
+      if(!currentUser || !currentFriend) return;
+      const text = msgInput.value.trim();
+      if(!text) return;
+      const cid = convIdFor(currentUser.uid, currentFriend.uid);
+      await addDoc(collection(db,'conversations',cid,'messages'), {
+        from: currentUser.uid,
         text,
-        timestamp: firebase.firestore.FieldValue.serverTimestamp()
+        ts: serverTimestamp()
       });
-      document.getElementById("messageInput").value = "";
+      msgInput.value='';
     }
 
-    function listenMessages() {
-      db.collection("messages")
-        .orderBy("timestamp")
-        .onSnapshot(snapshot => {
-          const chatBox = document.getElementById("chatBox");
-          chatBox.innerHTML = "";
-          snapshot.forEach(doc => {
-            const msg = doc.data();
-            const p = document.createElement("p");
-            p.textContent = `${msg.from}: ${msg.text}`;
-            chatBox.appendChild(p);
-          });
-        });
-    }
+    /*****************
+     * 7) WebRTC Call *
+     *****************/
+    const rtcConfig = { iceServers: [{ urls: [
+      'stun:stun.l.google.com:19302',
+      'stun:stun1.l.google.com:19302'
+    ] }] };
 
-    // 🎥 WebRTC Video Calling (Prototype)
-    async function startCall() {
-      peerConnection = new RTCPeerConnection(servers);
-      const localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-      document.getElementById("localVideo").srcObject = localStream;
-      localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
+    btnStartCall.addEventListener('click', startCall);
+    btnEndCall.addEventListener('click', stopCall);
 
-      peerConnection.ontrack = (event) => {
-        document.getElementById("remoteVideo").srcObject = event.streams[0];
-      };
+    async function startCall(){
+      if(!currentUser || !currentFriend) return alert('Open a chat first');
+      if(pc) return alert('Call already in progress');
+      const cid = convIdFor(currentUser.uid, currentFriend.uid);
+      const callRef = doc(db,'calls',cid);
 
-      const offer = await peerConnection.createOffer();
-      await peerConnection.setLocalDescription(offer);
+      // Setup peer connection
+      pc = new RTCPeerConnection(rtcConfig);
+      remoteStream = new MediaStream();
+      remoteVideo.srcObject = remoteStream;
 
-      // Store offer in Firestore (in production, use signaling server)
-      const callDoc = db.collection("calls").doc(currentUser.email);
-      await callDoc.set({ offer });
-
-      callDoc.onSnapshot(async (doc) => {
-        const data = doc.data();
-        if (data.answer && !peerConnection.currentRemoteDescription) {
-          await peerConnection.setRemoteDescription(new RTCSessionDescription(data.answer));
+      pc.addEventListener('icecandidate', async (event) => {
+        if(event.candidate){
+          const coll = collection(db,'calls',cid, isCaller? 'offerCandidates':'answerCandidates');
+          await addDoc(coll, event.candidate.toJSON());
         }
       });
+      pc.addEventListener('track', (event) => {
+        event.streams[0].getTracks().forEach(t => remoteStream.addTrack(t));
+      });
+
+      // Media
+      try{
+        localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+      }catch(e){
+        alert('Camera/mic permission needed.'); console.error(e); stopCall(); return;
+      }
+      localVideo.srcObject = localStream;
+      localStream.getTracks().forEach(t => pc.addTrack(t, localStream));
+
+      // Determine caller vs callee: if there's already an offer, we're the callee
+      const callSnap = await getDoc(callRef);
+      let isOfferExisting = callSnap.exists() && callSnap.data().offer;
+      window.isCaller = !isOfferExisting; // exposed for icecandidate handler
+
+      if(!isOfferExisting){
+        // Create an offer
+        const offer = await pc.createOffer();
+        await pc.setLocalDescription(offer);
+        await setDoc(callRef, { offer: { type: offer.type, sdp: offer.sdp } }, { merge: true });
+        callStatus.textContent = 'Calling…';
+      }else{
+        // Create an answer
+        await pc.setRemoteDescription(callSnap.data().offer);
+        const answer = await pc.createAnswer();
+        await pc.setLocalDescription(answer);
+        await setDoc(callRef, { answer: { type: answer.type, sdp: answer.sdp } }, { merge: true });
+        callStatus.textContent = 'Connecting…';
+      }
+
+      // Watch for remote session description
+      callDocUnsub = onSnapshot(callRef, async (docu) => {
+        const data = docu.data();
+        if(!data) return;
+        if(data.answer && pc.signalingState === 'have-local-offer'){
+          await pc.setRemoteDescription(data.answer);
+        }
+        if(data.offer && !isCaller && !pc.currentRemoteDescription){
+          // we are callee who started after offer existed
+          await pc.setRemoteDescription(data.offer);
+        }
+        if(pc.connectionState === 'connected'){
+          callStatus.textContent = 'In call';
+        }
+      });
+
+      // Listen for ICE candidates
+      const offColl = collection(db,'calls',cid,'offerCandidates');
+      const ansColl = collection(db,'calls',cid,'answerCandidates');
+
+      onSnapshot(offColl, (snap)=>{
+        snap.docChanges().forEach(async c => {
+          if(c.type === 'added'){
+            try{ await pc.addIceCandidate(c.doc.data()); }catch(e){ console.warn('ICE (offer) add err', e); }
+          }
+        });
+      });
+      onSnapshot(ansColl, (snap)=>{
+        snap.docChanges().forEach(async c => {
+          if(c.type === 'added'){
+            try{ await pc.addIceCandidate(c.doc.data()); }catch(e){ console.warn('ICE (answer) add err', e); }
+          }
+        });
+      });
+
+      // UI toggles
+      btnStartCall.disabled = true;
+      btnEndCall.disabled = false;
     }
 
-    async function endCall() {
-      peerConnection?.close();
-      peerConnection = null;
-      document.getElementById("localVideo").srcObject?.getTracks().forEach(t => t.stop());
-      document.getElementById("remoteVideo").srcObject = null;
+    async function stopCall(){
+      callStatus.textContent = 'Idle';
+      btnStartCall.disabled = false;
+      btnEndCall.disabled = true;
+
+      if(callDocUnsub){ callDocUnsub(); callDocUnsub = null; }
+
+      if(pc){
+        try{ pc.getSenders().forEach(s => { try{s.track && s.track.stop();}catch{ } }); }catch{}
+        try{ pc.close(); }catch{}
+        pc = null;
+      }
+      if(localStream){ localStream.getTracks().forEach(t => t.stop()); localStream=null; }
+      if(remoteStream){ remoteStream.getTracks().forEach(t => t.stop()); remoteStream=null; }
+      localVideo.srcObject = null; remoteVideo.srcObject = null;
+
+      // Optional: clear call document to allow future calls cleanly
+      if(currentUser && currentFriend){
+        const cid = convIdFor(currentUser.uid, currentFriend.uid);
+        try{
+          await setDoc(doc(db,'calls',cid), { offer: null, answer: null }, { merge: true });
+        }catch(e){ console.warn('Could not reset call doc', e); }
+      }
     }
+
+    // Update call status based on PC events
+    const watchPC = new MutationObserver(()=>{}); // placeholder to keep a reference
+    function attachPCStateDebug(){
+      if(!pc) return;
+      pc.addEventListener('connectionstatechange', () => {
+        callStatus.textContent = 'State: ' + pc.connectionState;
+      });
+      pc.addEventListener('iceconnectionstatechange', () => {
+        console.log('ICE state:', pc.iceConnectionState);
+      });
+    }
+
+    // Ensure we attach after creation
+    const _origStartCall = startCall;
+    startCall = async function(){ await _origStartCall(); attachPCStateDebug(); };
+
   </script>
+
+  <!--
+  =======================
+  Firestore Security Rules (starter)
+  =======================
+  In Firebase console > Firestore > Rules, adapt to your needs. Example (very simple):
+
+  rules_version = '2';
+  service cloud.firestore {
+    match /databases/{database}/documents {
+      function isAuthed() { return request.auth != null; }
+      function isUser(uid) { return request.auth != null && request.auth.uid == uid; }
+
+      match /users/{uid} {
+        allow read: if isAuthed();
+        allow write: if isUser(uid);
+        match /friends/{friendUid} { allow read, write: if isUser(uid); }
+        match /requests/{reqId} { allow read, write: if isUser(uid) || (request.resource.data.fromUid == request.auth.uid); }
+      }
+
+      match /usernames/{username} {
+        allow read: if true;
+        allow create: if isAuthed();
+        allow delete, update: if false; // keep stable
+      }
+
+      match /conversations/{cid} {
+        allow read, write: if isAuthed(); // tighten: ensure member
+        match /messages/{mid} { allow read, write: if isAuthed(); }
+      }
+
+      match /calls/{cid} {
+        allow read, write: if isAuthed();
+        match /{sub=**} { allow read, write: if isAuthed(); }
+      }
+    }
+  }
+
+  IMPORTANT: For production, restrict reads/writes so only conversation members can access their data.
+  -->
 </body>
 </html>
