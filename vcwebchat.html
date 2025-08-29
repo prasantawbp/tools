@@ -24,10 +24,6 @@
     const db = getDatabase(app);
 
     // ================== Auth ==================
-    const signupForm = document.getElementById("signupForm");
-    const loginForm = document.getElementById("loginForm");
-    const logoutBtn = document.getElementById("logoutBtn");
-
     signupForm.addEventListener("submit", async (e) => {
       e.preventDefault();
       await createUserWithEmailAndPassword(auth, signupEmail.value, signupPassword.value);
@@ -73,9 +69,11 @@
     const remoteVideo = document.getElementById("remoteVideo");
     const startCallBtn = document.getElementById("startCall");
     const answerCallBtn = document.getElementById("answerCall");
+    const endCallBtn = document.getElementById("endCall");
 
     let localStream;
     let pc;
+    let activeCallId = null;
     const servers = { iceServers: [{ urls: "stun:stun.l.google.com:19302" }] };
 
     async function initLocalStream() {
@@ -103,52 +101,56 @@
       return pc;
     }
 
-    // Create a call
+    // Random 6 digit Call ID
+    function generateCallId() {
+      return Math.floor(100000 + Math.random() * 900000).toString();
+    }
+
+    // Start a call
     startCallBtn.addEventListener("click", async () => {
       await initLocalStream();
-      const callRef = push(ref(db, "calls"));
-      const callId = callRef.key;
+      const callId = generateCallId();
+      activeCallId = callId;
 
       pc = await createPeerConnection(callId);
 
-      // Create offer
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
 
-      // Save offer to Firebase
       await set(ref(db, "calls/" + callId + "/offer"), offer);
 
       alert("Call created. Share this Call ID: " + callId);
+      endCallBtn.style.display = "inline-block";
     });
 
     // Answer a call
     answerCallBtn.addEventListener("click", async () => {
       const callId = prompt("Enter Call ID to join:");
       if (!callId) return;
+      activeCallId = callId;
 
       await initLocalStream();
       pc = await createPeerConnection(callId);
 
-      // Get offer
       const offerRef = ref(db, "calls/" + callId + "/offer");
       const snapshot = await new Promise((res) => onValue(offerRef, res, { onlyOnce: true }));
       const offer = snapshot.val();
 
       await pc.setRemoteDescription(new RTCSessionDescription(offer));
 
-      // Create and send answer
       const answer = await pc.createAnswer();
       await pc.setLocalDescription(answer);
       await set(ref(db, "calls/" + callId + "/answer"), answer);
 
-      // Listen for ICE candidates
       onChildAdded(ref(db, "calls/" + callId + "/candidates"), (snap) => {
         const cand = snap.val();
         if (cand) pc.addIceCandidate(new RTCIceCandidate(cand));
       });
+
+      endCallBtn.style.display = "inline-block";
     });
 
-    // Listen for answer when you are the caller
+    // Caller listens for answer
     onChildAdded(ref(db, "calls"), (snap) => {
       const callId = snap.key;
       const answerRef = ref(db, "calls/" + callId + "/answer");
@@ -159,6 +161,26 @@
         }
       });
     });
+
+    // End call
+    endCallBtn.addEventListener("click", async () => {
+      if (pc) {
+        pc.close();
+        pc = null;
+      }
+      if (localStream) {
+        localStream.getTracks().forEach(track => track.stop());
+        localStream = null;
+        localVideo.srcObject = null;
+        remoteVideo.srcObject = null;
+      }
+      if (activeCallId) {
+        await remove(ref(db, "calls/" + activeCallId));
+        activeCallId = null;
+      }
+      alert("Call ended.");
+      endCallBtn.style.display = "none";
+    });
   </script>
   <style>
     body { font-family: Arial; margin: 20px; background: #f4f4f4; }
@@ -166,6 +188,7 @@
     input, button { padding: 8px; margin: 5px; }
     #messages { background: #fff; padding: 10px; border: 1px solid #ccc; height: 200px; overflow-y: auto; }
     video { width: 220px; border: 2px solid #333; margin: 5px; }
+    #endCall { display: none; background: red; color: white; }
   </style>
 </head>
 <body>
@@ -207,6 +230,7 @@
     <br>
     <button id="startCall">Start Call</button>
     <button id="answerCall">Answer Call</button>
+    <button id="endCall">End Call</button>
   </div>
 </body>
 </html>
